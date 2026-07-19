@@ -1,5 +1,7 @@
-import type Realm from 'realm'
-import { RollbackLogger, snapshot } from './logger.js'
+import { existsSync } from 'fs'
+import { join } from 'path'
+import type { OsuFilesContext } from '../context.js'
+import { snapshot } from './logger.js'
 import { ValidationError, required, unique, resolveRef } from './validate.js'
 
 export type DeleteGuard = {
@@ -33,70 +35,88 @@ export type EntityConfig<T> = {
   guards?: DeleteGuard[]
 }
 
+function hashFilePath(base: string, hash: string): string {
+  return join(base, hash[0], hash.substring(0, 2), hash)
+}
+
 /**
  * Creates a {@link create | CRUD} helper for a Realm entity type.
  *
  * @example
- * createCrud<Beatmap>(realm, logger, {
+ * createCrud<Beatmap>(ctx, {
  *   name: 'Beatmap', pk: 'ID',
  *   required: ['ID', 'Status', 'OnlineID'],
  *   fks: { Ruleset: 'Ruleset', BeatmapSet: 'BeatmapSet' },
  *   guards: [{ type: 'Score', filter: 'BeatmapInfo.ID == $0', label: 'Score' }],
  * })
  */
-export function createCrud<T>(realm: Realm, logger: RollbackLogger, cfg: EntityConfig<T>) {
+export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
   return {
     create(input: Record<string, unknown>): T {
       for (const f of cfg.required ?? [])
         required(input[f], `${cfg.name}.${f}`)
       if (!cfg.pkOptional && input[cfg.pk] !== undefined && input[cfg.pk] !== null)
-        unique(realm, cfg.name, cfg.pk, input[cfg.pk])
+        unique(ctx.realm, cfg.name, cfg.pk, input[cfg.pk])
 
       const data: Record<string, unknown> = { ...input }
       for (const f of cfg.strip ?? []) delete data[f]
       for (const [field, type] of Object.entries(cfg.fks ?? {}))
-        if (field in input) data[field] = resolveRef(realm, type, input[field] as never)
+        if (field in input) data[field] = resolveRef(ctx.realm, type, input[field] as never)
+
+      if (ctx.checkHash && !ctx.filesFolderPath) throw new ValidationError(`Can't verify hash, no files folder set.`)
+      
+      if (ctx.checkHash && ctx.filesFolderPath && input.Hash) {
+        const fp = hashFilePath(ctx.filesFolderPath, input.Hash as string)
+        if (!existsSync(fp))
+          throw new ValidationError(`File not found: ${fp}`)
+      }
 
       let created: T
-      realm.write(() => { created = realm.create<T>(cfg.name, data as never) })
-      logger.log(cfg.name, 'create', String(input[cfg.pk] ?? '(nil)'), null, created!)
+      ctx.realm.write(() => { created = ctx.realm.create<T>(cfg.name, data as never) })
+      ctx.logger.log(cfg.name, 'create', String(input[cfg.pk] ?? '(nil)'), null, created!)
       return created!
     },
 
     /** Update an existing entity by PK. */
     update(id: string, patch: Record<string, unknown>): T {
-      const existing = realm.objectForPrimaryKey<T>(cfg.name, id as never)
+      const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, id as never)
       if (!existing) throw new ValidationError(`${cfg.name} '${id}' not found`)
 
-      const before = snapshot(realm, cfg.name, id)
+      const before = snapshot(ctx.realm, cfg.name, id)
       const data: Record<string, unknown> = { ...patch }
       for (const f of cfg.strip ?? []) delete data[f]
       for (const [field, type] of Object.entries(cfg.fks ?? {}))
-        if (field in patch) data[field] = resolveRef(realm, type, patch[field] as never)
+        if (field in patch) data[field] = resolveRef(ctx.realm, type, patch[field] as never)
 
-      realm.write(() => {
+      if (ctx.checkHash && ctx.filesFolderPath && patch.Hash) {
+        const fp = hashFilePath(ctx.filesFolderPath, patch.Hash as string)
+        if (!existsSync(fp))
+          throw new ValidationError(`File not found: ${fp}`)
+      }
+
+      ctx.realm.write(() => {
         for (const key of Object.keys(data)) {
           if (key === cfg.pk) continue
           ;(existing as any)[key] = data[key]
         }
       })
-      logger.log(cfg.name, 'update', id, before, snapshot(realm, cfg.name, id))
+      ctx.logger.log(cfg.name, 'update', id, before, snapshot(ctx.realm, cfg.name, id))
       return existing
     },
 
     delete(id: string): boolean {
-      const existing = realm.objectForPrimaryKey<T>(cfg.name, id as never)
+      const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, id as never)
       if (!existing) return false
 
       for (const guard of cfg.guards ?? []) {
-        const refs = realm.objects(guard.type).filtered(guard.filter, id)
+        const refs = ctx.realm.objects(guard.type).filtered(guard.filter, id)
         if (refs.length > 0)
           throw new ValidationError(`Cannot delete ${cfg.name} '${id}': ${refs.length} ${guard.label}(s) reference it`)
       }
 
-      const before = snapshot(realm, cfg.name, id)
-      realm.write(() => { realm.delete(existing as never) })
-      logger.log(cfg.name, 'delete', id, before, null)
+      const before = snapshot(ctx.realm, cfg.name, id)
+      ctx.realm.write(() => { ctx.realm.delete(existing as never) })
+      ctx.logger.log(cfg.name, 'delete', id, before, null)
       return true
     },
 
@@ -104,7 +124,7 @@ export function createCrud<T>(realm: Realm, logger: RollbackLogger, cfg: EntityC
     upsert(input: Record<string, unknown>): T {
       const pkVal = input[cfg.pk]
       if (pkVal === undefined || pkVal === null) return this.create(input)
-      const existing = realm.objectForPrimaryKey<T>(cfg.name, pkVal as never)
+      const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, pkVal as never)
       if (existing) return this.update(String(pkVal), input)
       return this.create(input)
     },
