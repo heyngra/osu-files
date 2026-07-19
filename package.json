@@ -1,0 +1,32 @@
+{
+  "name": "osu-files",
+  "version": "1.0.0",
+  "description": "A module used to manage, read and modify osu!lazer data.",
+  "license": "MIT",
+  "author": "heyn",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "dependencies": {
+    "realm": "^20.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "tsx": "^4.23.1",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,38 @@
+import type { Score } from './types.js'
+
+export type { Score }
+export type { Score as default }
+
+export const ScoreSchema = {
+  name: 'Score',
+  primaryKey: 'ID',
+  properties: {
+    ID: 'uuid',
+    BeatmapInfo: 'Beatmap',
+    Ruleset: 'Ruleset',
+    Files: 'RealmNamedFileUsage[]',
+    Hash: 'string?',
+    DeletePending: 'bool',
+    TotalScore: 'int',
+    MaxCombo: 'int',
+    Accuracy: 'double',
+    Date: 'date',
+    PP: 'double?',
+    OnlineID: { type: 'int', indexed: true },
+    User: 'RealmUser',
+    Mods: 'string?',
+    Statistics: 'string?',
+    Rank: 'int',
+    Combo: 'int',
+    MaximumStatistics: 'string?',
+    BeatmapHash: { type: 'string', indexed: true, optional: true },
+    IsLegacyScore: 'bool',
+    ClientVersion: 'string?',
+    TotalScoreWithoutMods: 'int',
+    TotalScoreVersion: 'int',
+    LegacyTotalScore: 'int?',
+    BackgroundReprocessingFailed: 'bool',
+    LegacyOnlineID: { type: 'int', indexed: true },
+    Pauses: 'int[]',
+  },
+} as const
