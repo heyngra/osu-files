@@ -9,28 +9,55 @@ import { createSkinModule } from './skins.js'
 import { createFileModule } from './files.js'
 import { createKeyBindingModule } from './keybindings.js'
 import { createModPresetModule } from './modpresets.js'
+import { RollbackLogger, type ChangeLogEntry, type RollbackOptions } from './write/logger.js'
 
 export * from './schema/index.js'
 
-export function init(path: string, schemaVersion = 51) {
+export type { ChangeLogEntry, RollbackOptions }
+
+export type InitOptions = {
+  schemaVersion?: number
+  readOnly?: boolean
+  rollback?: RollbackOptions | false
+}
+
+export function init(path: string, options?: InitOptions) {
+  const { schemaVersion = 51, readOnly = false, rollback: rb } = options ?? {}
+  const rollbackOpts: RollbackOptions = rb === undefined
+    ? { enabled: !readOnly }
+    : (rb === false ? { enabled: false } : { enabled: !readOnly, ...rb })
+
   const realm = new Realm({
     path,
     schema: Schema as Realm.ObjectSchema[],
     schemaVersion,
-    readOnly: true,
+    readOnly,
   })
 
-  return {
-    close() { realm.close() },
+  const logger = new RollbackLogger(rollbackOpts)
 
-    beatmaps: createBeatmapModule(realm),
-    scores: createScoreModule(realm),
-    sets: createBeatmapSetModule(realm),
-    collections: createCollectionModule(realm),
-    rulesets: createRulesetModule(realm),
-    skins: createSkinModule(realm),
-    files: createFileModule(realm),
-    keybindings: createKeyBindingModule(realm),
-    modpresets: createModPresetModule(realm),
+  return {
+    close() {
+      logger.disable()
+      realm.close()
+    },
+
+    rollback: {
+      get entries(): readonly ChangeLogEntry[] { return logger.getEntries() },
+      get enabled(): boolean { return logger.enabled },
+      revert: () => logger.revert(),
+      revertLast: () => logger.revertLast(),
+      disable: () => logger.disable(),
+    },
+
+    beatmaps: createBeatmapModule(realm, logger),
+    scores: createScoreModule(realm, logger),
+    sets: createBeatmapSetModule(realm, logger),
+    collections: createCollectionModule(realm, logger),
+    rulesets: createRulesetModule(realm, logger),
+    skins: createSkinModule(realm, logger),
+    files: createFileModule(realm, logger),
+    keybindings: createKeyBindingModule(realm, logger),
+    modpresets: createModPresetModule(realm, logger),
   }
 }

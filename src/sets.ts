@@ -1,14 +1,11 @@
 import type Realm from 'realm'
 import type { BeatmapSet } from './schema/types.js'
+import type { RollbackLogger } from './write/logger.js'
+import { createBeatmapSetGetModule } from './get/sets.get.js'
+import { createCrud } from './write/util.js'
+import { getConfig } from './write/factory.js'
 
-export function createBeatmapSetModule(realm: Realm) {
-  return {
-    get: {
-      all: (): BeatmapSet[] => [...realm.objects<BeatmapSet>('BeatmapSet')],
-      byId: (id: string): BeatmapSet | undefined => realm.objectForPrimaryKey<BeatmapSet>('BeatmapSet', id) ?? undefined,
-      byOnlineId: (id: number): BeatmapSet | undefined => realm.objects<BeatmapSet>('BeatmapSet').filtered('OnlineID == $0', id)[0] ?? undefined,
-      recent: (limit = 50): BeatmapSet[] => [...realm.objects<BeatmapSet>('BeatmapSet').sorted('DateAdded', true).slice(0, limit)],
-      search: (query: string): BeatmapSet[] => [...realm.objects<BeatmapSet>('BeatmapSet').filtered('ANY Beatmaps.Metadata.Title CONTAINS[c] $0 OR ANY Beatmaps.Metadata.Artist CONTAINS[c] $0', query)],
-    },
-  }
+export function createBeatmapSetModule(realm: Realm, logger: RollbackLogger) {
+  const get = createBeatmapSetGetModule(realm)
+  return { ...get, get, write: createCrud<BeatmapSet>(realm, logger, getConfig('BeatmapSet')!) }
 }

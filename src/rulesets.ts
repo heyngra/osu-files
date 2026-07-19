@@ -1,13 +1,11 @@
 import type Realm from 'realm'
 import type { Ruleset } from './schema/types.js'
+import type { RollbackLogger } from './write/logger.js'
+import { createRulesetGetModule } from './get/rulesets.get.js'
+import { createCrud } from './write/util.js'
+import { getConfig } from './write/factory.js'
 
-export function createRulesetModule(realm: Realm) {
-  return {
-    get: {
-      all: (): Ruleset[] => [...realm.objects<Ruleset>('Ruleset')],
-      available: (): Ruleset[] => [...realm.objects<Ruleset>('Ruleset').filtered('Available == true')],
-      byShortName: (name: string): Ruleset | undefined => realm.objectForPrimaryKey<Ruleset>('Ruleset', name) ?? undefined,
-      byOnlineId: (id: number): Ruleset | undefined => realm.objects<Ruleset>('Ruleset').filtered('OnlineID == $0', id)[0] ?? undefined,
-    },
-  }
+export function createRulesetModule(realm: Realm, logger: RollbackLogger) {
+  const get = createRulesetGetModule(realm)
+  return { ...get, get, write: createCrud<Ruleset>(realm, logger, getConfig('Ruleset')!) }
 }

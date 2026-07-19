@@ -1,17 +1,11 @@
 import type Realm from 'realm'
 import type { Score } from './schema/types.js'
+import type { RollbackLogger } from './write/logger.js'
+import { createScoreGetModule } from './get/scores.get.js'
+import { createCrud } from './write/util.js'
+import { getConfig } from './write/factory.js'
 
-export function createScoreModule(realm: Realm) {
-  return {
-    get: {
-      all: (): Score[] => [...realm.objects<Score>('Score')],
-      byId: (id: string): Score | undefined => realm.objectForPrimaryKey<Score>('Score', id) ?? undefined,
-      byOnlineId: (id: number): Score[] => [...realm.objects<Score>('Score').filtered('OnlineID == $0', id)],
-      recent: (limit = 100): Score[] => [...realm.objects<Score>('Score').sorted('Date', true).slice(0, limit)],
-      forBeatmap: (hash: string): Score[] => [...realm.objects<Score>('Score').filtered('BeatmapHash == $0', hash).sorted('Date', true)],
-      best: (limit = 50): Score[] => [...realm.objects<Score>('Score').filtered('PP != nil').sorted('PP', true).slice(0, limit)],
-      byRuleset: (shortName: string): Score[] => [...realm.objects<Score>('Score').filtered('Ruleset.ShortName == $0', shortName).sorted('Date', true)],
-      byUser: (onlineId: number): Score[] => [...realm.objects<Score>('Score').filtered('User.OnlineID == $0', onlineId).sorted('Date', true)],
-    },
-  }
+export function createScoreModule(realm: Realm, logger: RollbackLogger) {
+  const get = createScoreGetModule(realm)
+  return { ...get, get, write: createCrud<Score>(realm, logger, getConfig('Score')!) }
 }

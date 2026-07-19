@@ -1,0 +1,15 @@
+import type Realm from 'realm'
+import type { Score } from '../schema/types.js'
+
+export function createScoreGetModule(realm: Realm) {
+  return {
+    all: (): Score[] => [...realm.objects<Score>('Score')],
+    byId: (id: string): Score | undefined => realm.objectForPrimaryKey<Score>('Score', id) ?? undefined,
+    byOnlineId: (id: number): Score[] => [...realm.objects<Score>('Score').filtered('OnlineID == $0', id)],
+    recent: (limit = 100): Score[] => [...realm.objects<Score>('Score').sorted('Date', true).slice(0, limit)],
+    forBeatmap: (hash: string): Score[] => [...realm.objects<Score>('Score').filtered('BeatmapHash == $0', hash).sorted('Date', true)],
+    best: (limit = 50): Score[] => [...realm.objects<Score>('Score').filtered('PP != nil').sorted('PP', true).slice(0, limit)],
+    byRuleset: (shortName: string): Score[] => [...realm.objects<Score>('Score').filtered('Ruleset.ShortName == $0', shortName).sorted('Date', true)],
+    byUser: (onlineId: number): Score[] => [...realm.objects<Score>('Score').filtered('User.OnlineID == $0', onlineId).sorted('Date', true)],
+  }
+}

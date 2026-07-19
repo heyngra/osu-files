@@ -1,13 +1,11 @@
 import type Realm from 'realm'
 import type { BeatmapCollection } from './schema/types.js'
+import type { RollbackLogger } from './write/logger.js'
+import { createCollectionGetModule } from './get/collections.get.js'
+import { createCrud } from './write/util.js'
+import { getConfig } from './write/factory.js'
 
-export function createCollectionModule(realm: Realm) {
-  return {
-    get: {
-      all: (): BeatmapCollection[] => [...realm.objects<BeatmapCollection>('BeatmapCollection')],
-      byId: (id: string): BeatmapCollection | undefined => realm.objectForPrimaryKey<BeatmapCollection>('BeatmapCollection', id) ?? undefined,
-      byName: (name: string): BeatmapCollection[] => [...realm.objects<BeatmapCollection>('BeatmapCollection').filtered('Name CONTAINS[c] $0', name)],
-      withBeatmap: (md5: string): BeatmapCollection[] => [...realm.objects<BeatmapCollection>('BeatmapCollection').filtered('ANY BeatmapMD5Hashes == $0', md5)],
-    },
-  }
+export function createCollectionModule(realm: Realm, logger: RollbackLogger) {
+  const get = createCollectionGetModule(realm)
+  return { ...get, get, write: createCrud<BeatmapCollection>(realm, logger, getConfig('BeatmapCollection')!) }
 }
