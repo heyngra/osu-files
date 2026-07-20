@@ -1,5 +1,7 @@
+import type { BSON } from 'realm'
+
 export type Beatmap = {
-  ID: string
+  ID: BSON.UUID
   DifficultyName?: string
   Ruleset?: Ruleset
   Difficulty?: BeatmapDifficulty
@@ -25,7 +27,7 @@ export type Beatmap = {
 }
 
 export type BeatmapCollection = {
-  ID: string
+  ID: BSON.UUID
   Name?: string
   BeatmapMD5Hashes: Array<string | undefined>
   LastModified: Date
@@ -55,7 +57,7 @@ export type BeatmapMetadata = {
 }
 
 export type BeatmapSet = {
-  ID: string
+  ID: BSON.UUID
   OnlineID: number
   DateAdded: Date
   Beatmaps: Array<Beatmap>
@@ -77,7 +79,7 @@ export type File = {
 }
 
 export type KeyBinding = {
-  ID: string
+  ID: BSON.UUID
   RulesetName?: string
   Variant?: number
   Action: number
@@ -85,7 +87,7 @@ export type KeyBinding = {
 }
 
 export type ModPreset = {
-  ID: string
+  ID: BSON.UUID
   Ruleset?: Ruleset
   Name?: string
   Description?: string
@@ -125,7 +127,7 @@ export type RulesetSetting = {
 }
 
 export type Score = {
-  ID: string
+  ID: BSON.UUID
   BeatmapInfo?: Beatmap
   Ruleset?: Ruleset
   Files: Array<RealmNamedFileUsage>
@@ -155,7 +157,7 @@ export type Score = {
 }
 
 export type Skin = {
-  ID: string
+  ID: BSON.UUID
   Name?: string
   Creator?: string
   InstantiationInfo?: string

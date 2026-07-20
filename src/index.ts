@@ -11,11 +11,23 @@ import { createFileModule } from './files.js'
 import { createKeyBindingModule } from './keybindings.js'
 import { createModPresetModule } from './modpresets.js'
 import { RollbackLogger, type ChangeLogEntry, type RollbackOptions } from './write/logger.js'
+import { importOsz } from './osz/import.js'
+import { exportOsz, exportOszFromData } from './osz/export.js'
+import { parseOsu } from './beatmap/parse.js'
+import { serializeOsu } from './beatmap/serialize.js'
+import { realmBeatmapToOsuBeatmap, realmSetToBeatmapSetData } from './beatmap/migrate.js'
 
 export * from './schema/index.js'
 export type { OsuFilesContext }
 export type { ChangeLogEntry, RollbackOptions }
 export { hasFilesFolder } from './context.js'
+
+export type { BeatmapSetData, BeatmapSetFile } from './osz/types.js'
+export type {
+  OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,
+  TimingPoint, OsuColour, OsuEvent, HitObject, HitCircle, HitSlider,
+  HitSpinner, HitHold, SliderExtras, SliderCurveType,
+} from './beatmap/types.js'
 
 export type InitOptions = {
   schemaVersion?: number
@@ -68,5 +80,20 @@ export function init(path: string, options?: InitOptions) {
     files: createFileModule(ctx),
     keybindings: createKeyBindingModule(ctx),
     modpresets: createModPresetModule(ctx),
+
+    osz: {
+      import: (filePath: string) => importOsz(ctx, filePath),
+      export: (setID: string, outputPath: string, options?: { beatmaps?: import('./beatmap/types.js').OsuBeatmap[] }) =>
+        exportOsz(ctx, setID, outputPath, options),
+      exportFromData: (data: import('./osz/types.js').BeatmapSetData, outputPath: string) =>
+        exportOszFromData(ctx, data, outputPath),
+    },
+
+    beatmap: {
+      parse: (content: string) => parseOsu(content),
+      serialize: (beatmap: import('./beatmap/types.js').OsuBeatmap) => serializeOsu(beatmap),
+      getFullData: (beatmapId: string) => realmBeatmapToOsuBeatmap(ctx, beatmapId),
+      getFullDataSet: (setId: string) => realmSetToBeatmapSetData(ctx, setId),
+    },
   }
 }
