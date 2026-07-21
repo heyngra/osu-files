@@ -1,6 +1,6 @@
-import { describe, it, before } from 'node:test'
+import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
-import { existsSync, mkdirSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { createHash } from 'crypto'
@@ -13,12 +13,16 @@ function sha256(buf: Buffer): string {
 }
 
 describe('Import/Export .osz', { timeout: 60000 }, () => {
-  const tmpRoot = join(tmpdir(), `osz-test-${Date.now()}`)
+  const tmpRoot = join(tmpdir(), `osu-files-test-osz-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
-  const realmPath = join(tmpRoot, 'test.realm')
+  const realmPath = join(tmpRoot, 'client.realm')
 
   before(() => {
     mkdirSync(filesPath, { recursive: true })
+  })
+
+  after(() => {
+    rmSync(tmpRoot, { recursive: true, force: true })
   })
 
   it('imports .osz and populates Realm correctly', async () => {
@@ -87,14 +91,16 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
   })
 
   it('reimports exported .osz correctly', async () => {
-    const osu2 = init(join(tmpRoot, 'reimport.realm'), {
+    const reimportRoot = mkdtempSync(join(tmpdir(), 'osu-files-test-'))
+    const osu2 = init(join(reimportRoot, 'client.realm'), {
       schemaVersion: 51,
-      filesFolderPath: join(tmpRoot, 'files2'),
+      filesFolderPath: join(reimportRoot, 'files'),
     })
     const reimported = await osu2.osz.import(join(tmpRoot, 'exported.osz'))
     assert.strictEqual(reimported.beatmaps.length, 4)
     assert.strictEqual(reimported.onlineID, 506483)
     osu2.close()
+    rmSync(reimportRoot, { recursive: true, force: true })
   })
 
   it('upserts by OnlineID without duplicating', async () => {

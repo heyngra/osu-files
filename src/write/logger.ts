@@ -2,7 +2,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { writeFileSync, readdirSync, unlinkSync, statSync, existsSync, mkdirSync } from 'fs'
 
-export type LogAction = 'create' | 'update' | 'delete'
+export type LogAction = 'create' | 'update' | 'delete' | 'soft-delete' | 'undelete' | 'duplicate'
 
 export type ChangeLogEntry = {
   timestamp: number
@@ -108,7 +108,7 @@ export class RollbackLogger {
     } catch {}
   }
 
-  log(entity: string, action: LogAction, primaryKey: string, before: unknown, after: unknown): void {
+  log(entity: string, action: LogAction, primaryKey: unknown, before: unknown, after: unknown): void {
     if (!this.enabled) return
 
     const entry: ChangeLogEntry = {

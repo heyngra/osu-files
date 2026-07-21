@@ -1,5 +1,4 @@
 import { readFileSync } from 'fs'
-import { join } from 'path'
 import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
 import { parseOsu } from './parse.js'
@@ -7,10 +6,7 @@ import { serializeOsu } from './serialize.js'
 import type { OsuBeatmap } from './types.js'
 import type { BeatmapSetData, BeatmapSetFile } from '../osz/types.js'
 import type { Beatmap, BeatmapSet } from '../schema/types.js'
-
-function fileStoragePath(base: string, hash: string): string {
-  return join(base, hash[0], hash.substring(0, 2), hash)
-}
+import { fileStoragePath } from '../util.js'
 
 export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string): OsuBeatmap | undefined {
   if (!ctx.filesFolderPath) return undefined
@@ -93,9 +89,9 @@ export function osuBeatmapToRealmPayload(
       SliderMultiplier: osu.difficulty.sliderMultiplier,
       SliderTickRate: osu.difficulty.sliderTickRate,
     },
-    Status: -3,
-    OnlineID: -1,
-    Length: lastTime / 1000,
+    Status: 1,
+    OnlineID: osu.metadata.beatmapID ?? -1,
+    Length: lastTime,
     BPM: bpm,
     Hash: existingHash ?? '',
     StarRating: -1,

@@ -5,10 +5,10 @@ import { init, type InitOptions } from '../src/index.js'
 
 const TEST_PREFIX = 'osu-files-test-'
 
-function nukeOldTestDirs() {
+export function nukeOldTestDirs() {
   const tmp = tmpdir()
   for (const entry of readdirSync(tmp)) {
-    if (!entry.startsWith(TEST_PREFIX)) continue
+    if (!entry.startsWith(TEST_PREFIX) && !entry.startsWith('osk-') && !entry.startsWith('osz-test-')) continue
     try { rmSync(join(tmp, entry), { recursive: true, force: true }) } catch { /* in use, skip */ }
   }
 }
@@ -31,3 +31,4 @@ export function testInit(sourcePath: string, options?: InitOptions) {
 }
 
 export const SAMPLE_OSZ = './tests/506483 Icon For Hire - Make A Move.osz'
+export const SAMPLE_OSK = './tests/whitecatskin.osk'

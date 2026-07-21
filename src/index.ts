@@ -1,3 +1,4 @@
+import { writeFileSync } from 'fs'
 import Realm from 'realm'
 import { Schema } from './schema/index.js'
 import type { OsuFilesContext } from './context.js'
@@ -21,6 +22,10 @@ export * from './schema/index.js'
 export type { OsuFilesContext }
 export type { ChangeLogEntry, RollbackOptions }
 export { hasFilesFolder } from './context.js'
+export { BUILT_IN_SKINS, BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from './skin/constants.js'
+export type { ImportedSkinData } from './skin/import.js'
+export { parseSkinIni } from './skin/skin-ini.js'
+export type { SkinIni, SkinIniGeneral, SkinIniColours, SkinIniFonts, SkinIniCatchTheBeat, SkinIniMania, SkinIniColour } from './skin/skin-ini.js'
 
 export type { BeatmapSetData, BeatmapSetFile } from './osz/types.js'
 export type {
@@ -34,10 +39,12 @@ export type InitOptions = {
   readOnly?: boolean
   rollback?: RollbackOptions | false
   filesFolderPath?: string
-  /** Every write checks, if hash is present in the files folder.*/
+  /** Every write checks if hash is present in the files folder.*/
   checkHash?: boolean
 }
-
+/**
+ * @param path client.realm path
+ */
 export function init(path: string, options?: InitOptions) {
   const { schemaVersion = 51, readOnly = false, rollback: rb, filesFolderPath, checkHash } = options ?? {}
   const rollbackOpts: RollbackOptions = rb === undefined
@@ -54,6 +61,8 @@ export function init(path: string, options?: InitOptions) {
   const logger = new RollbackLogger(rollbackOpts)
 
   const ctx: OsuFilesContext = { realm, logger, filesFolderPath, checkHash }
+
+  const skins = createSkinModule(ctx)
 
   return {
     ctx,
@@ -76,7 +85,7 @@ export function init(path: string, options?: InitOptions) {
     sets: createBeatmapSetModule(ctx),
     collections: createCollectionModule(ctx),
     rulesets: createRulesetModule(ctx),
-    skins: createSkinModule(ctx),
+    skins,
     files: createFileModule(ctx),
     keybindings: createKeyBindingModule(ctx),
     modpresets: createModPresetModule(ctx),
@@ -89,6 +98,14 @@ export function init(path: string, options?: InitOptions) {
         exportOszFromData(ctx, data, outputPath),
     },
 
+    osk: {
+      import: (filePath: string) => skins.importOsk(filePath),
+      export: async (skinId: string, outputPath: string) => {
+        const buf = await skins.exportOsk(skinId)
+        writeFileSync(outputPath, buf)
+      },
+    },
+
     beatmap: {
       parse: (content: string) => parseOsu(content),
       serialize: (beatmap: import('./beatmap/types.js').OsuBeatmap) => serializeOsu(beatmap),
@@ -97,3 +114,5 @@ export function init(path: string, options?: InitOptions) {
     },
   }
 }
+
+export default init;

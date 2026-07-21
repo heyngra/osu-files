@@ -1,5 +1,4 @@
 import { readFileSync, createWriteStream } from 'fs'
-import { join } from 'path'
 import Realm from 'realm'
 import { ZipFile } from 'yazl'
 import type { OsuFilesContext } from '../context.js'
@@ -7,10 +6,7 @@ import { serializeOsu } from '../beatmap/serialize.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from './types.js'
 import type { BeatmapSet } from '../schema/types.js'
-
-function fileStoragePath(base: string, hash: string): string {
-  return join(base, hash[0], hash.substring(0, 2), hash)
-}
+import { fileStoragePath } from '../util.js'
 
 export type ExportOptions = {
   beatmaps?: OsuBeatmap[]

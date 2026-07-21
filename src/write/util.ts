@@ -78,7 +78,7 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
     },
 
     /** Update an existing entity by PK. */
-    update(id: string, patch: Record<string, unknown>): T {
+    update(id: unknown, patch: Record<string, unknown>): T {
       const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, id as never)
       if (!existing) throw new ValidationError(`${cfg.name} '${id}' not found`)
 
@@ -104,7 +104,7 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
       return existing
     },
 
-    delete(id: string): boolean {
+    delete(id: unknown): boolean {
       const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, id as never)
       if (!existing) return false
 
