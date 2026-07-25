@@ -37,6 +37,7 @@ const configs = (() => {
 
       for (const [key, prop] of Object.entries(schema.properties)) {
         if (key === pk) continue
+        if (typeof prop === 'object' && prop !== null && (prop as { type?: string }).type === 'linkingObjects') continue
         const { base, optional, isArray } = parseProp(prop)
         if (!optional && !isArray && !allNames.has(base))
           required.push(key)
@@ -61,6 +62,12 @@ const configs = (() => {
     })
 })()
 
+/**
+ * Looks up EntityConfig for a Realm type name.
+ * @returns Entity config or undefined if not found.
+ * @example
+ * getConfig('Beatmap') // { name: 'Beatmap', pk: 'ID', required: [...], ... }
+ */
 export function getConfig(name: string): EntityConfig<unknown> | undefined {
   return configs.find(c => c.name === name)
 }

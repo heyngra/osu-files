@@ -2,8 +2,17 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { writeFileSync, readdirSync, unlinkSync, statSync, existsSync, mkdirSync } from 'fs'
 
-export type LogAction = 'create' | 'update' | 'delete' | 'soft-delete' | 'undelete' | 'duplicate'
+/** Log action types for change tracking. */
+export enum LogAction {
+  Create = 'create',
+  Update = 'update',
+  Delete = 'delete',
+  SoftDelete = 'soft-delete',
+  Undelete = 'undelete',
+  Duplicate = 'duplicate',
+}
 
+/** Shape of a single change log entry. */
 export type ChangeLogEntry = {
   timestamp: number
   entity: string
@@ -13,24 +22,30 @@ export type ChangeLogEntry = {
   after: Record<string, unknown> | null
 }
 
+/** Options for configuring the rollback logger. */
 export type RollbackOptions = {
+  /** @default true */
   enabled?: boolean
+  /** Max total log file size in bytes. @default 1048576 */
   maxSize?: number
+  /** Max log file age in milliseconds. @default 86400000 */
   maxAge?: number
 }
 
-function serialize(obj: unknown, seen?: WeakSet<object>): unknown {
-  seen = seen ?? new WeakSet()
+function identifier(obj: object): string {
+  return String((obj as Record<string, unknown>).ID ?? (obj as Record<string, unknown>).Hash ?? (obj as Record<string, unknown>).ShortName ?? '')
+}
+
+function serialize(obj: unknown, seen?: Set<string>): unknown {
+  seen = seen ?? new Set()
   if (obj === null || obj === undefined) return null
   if (typeof obj !== 'object') return obj
   if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(v => serialize(v, seen))
 
-  if (seen.has(obj)) {
-    try { return (obj as Record<string, unknown>).ID ?? (obj as Record<string, unknown>).Hash ?? (obj as Record<string, unknown>).ShortName ?? null }
-    catch { return null }
-  }
-  seen.add(obj)
+  const id = identifier(obj)
+  if (id && seen.has(id)) return id
+  if (id) seen.add(id)
 
   const result: Record<string, unknown> = {}
   for (const key of Object.keys(obj as Record<string, unknown>)) {
@@ -45,6 +60,14 @@ function serialize(obj: unknown, seen?: WeakSet<object>): unknown {
   return result
 }
 
+/**
+ * Logs change entries for rollback support. Writes each entry as a JSON file in a temp directory.
+ *
+ * @param options - Rollback configuration.
+ * @param options.enabled - Enable rollback logging. @default true
+ * @param options.maxSize - Max total log file size in bytes. @default 1048576
+ * @param options.maxAge - Max log file age in milliseconds. @default 86400000
+ */
 export class RollbackLogger {
   private entries: ChangeLogEntry[] = []
   private entrySize = 0
@@ -159,6 +182,12 @@ export class RollbackLogger {
   }
 }
 
+/**
+ * Serializes a Realm object to a JSON-safe snapshot.
+ * @returns Serialized JSON-safe object, or null.
+ * @example
+ * snapshot(realm, 'BeatmapSet', setUUID) // { ID: '...', OnlineID: 123, ... }
+ */
 export function snapshot(realm: Realm, type: string, pk: unknown): Record<string, unknown> | null {
   if (pk === undefined || pk === null) return null
   const obj = realm.objectForPrimaryKey(type, pk as never)

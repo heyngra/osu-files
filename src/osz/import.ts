@@ -7,8 +7,15 @@ import type { BeatmapSetData } from './types.js'
 import { importSet, type ImportSetInput } from '../write/set-import.js'
 import { sha256, md5, fileStoragePath, ensureParentDir, normalizeFilename, detectCommonPrefix, stripPrefix } from '../util.js'
 
+/** A single entry read from a zip archive. */
 export type ZipEntry = { filename: string; buffer: Buffer }
 
+/**
+ * Reads all entries from a zip file.
+ * @returns Array of zip entries with filename and buffer.
+ * @example
+ * readZipEntries('/path/to/file.osz') // [{ filename: 'song.osu', buffer: <Buffer> }]
+ */
 export function readZipEntries(filePath: string): Promise<ZipEntry[]> {
   return new Promise((resolve, reject) => {
     const entries: ZipEntry[] = []
@@ -44,6 +51,13 @@ function computeSetHash(osuFiles: { filename: string; content: Buffer }[]): stri
 type ProcessedEntry = { filename: string; buffer: Buffer; hash: string }
 type OsuEntry = { filename: string; buffer: Buffer; hash: string; md5Hash: string; beatmap: OsuBeatmap }
 
+/**
+ * Imports an .osz archive into the Realm database.
+ * @returns Imported beatmap set data.
+ * @throws If filesFolderPath is missing or archive is empty.
+ * @example
+ * importOsz(ctx, '/path/to/beatmap.osz') // BeatmapSetData
+ */
 export async function importOsz(ctx: OsuFilesContext, filePath: string): Promise<BeatmapSetData> {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for import')
 

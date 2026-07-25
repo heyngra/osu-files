@@ -8,11 +8,16 @@ import { importSet as importSetFn, type ImportSetInput } from './write/set-impor
 import type { BeatmapSetData } from './osz/types.js'
 import { cleanupOrphanedFiles } from './files.js'
 
+/**
+ * Creates the beatmap set sub-module with query, write, import, and delete operations.
+ * @example
+ * const set = db.sets.get.byId(id)
+ */
 export function createBeatmapSetModule(ctx: OsuFilesContext) {
   const get = createBeatmapSetGetModule(ctx.realm)
   const write = createCrud<BeatmapSet>(ctx, getConfig('BeatmapSet')!)
   return {
-    ...get, get,
+    get,
     write,
     importSet: (data: ImportSetInput): BeatmapSetData => importSetFn(ctx, data),
     delete: (setId: string): void => {
@@ -23,3 +28,6 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
     },
   }
 }
+
+/** Beatmap set sub-module with query, write, import, and delete operations. */
+export type BeatmapSetModule = ReturnType<typeof createBeatmapSetModule>

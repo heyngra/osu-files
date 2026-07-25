@@ -6,13 +6,14 @@ import { tmpdir } from 'os'
 import { createHash } from 'crypto'
 import { readZipEntries } from '../src/osz/import.js'
 import { init } from '../src/index.js'
-import { SAMPLE_OSZ } from './helpers.js'
+import { nukeOldTestDirs, SAMPLE_OSZ } from './helpers.js'
 
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex')
 }
 
 describe('Import/Export .osz', { timeout: 60000 }, () => {
+  nukeOldTestDirs()
   const tmpRoot = join(tmpdir(), `osu-files-test-osz-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
   const realmPath = join(tmpRoot, 'client.realm')
@@ -34,11 +35,11 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
     assert.strictEqual(result.files.length, 13)
     assert.ok(result.setHash)
 
-    const sets = osu.sets.all()
+    const sets = osu.sets.get.all()
     assert.strictEqual(sets.length, 1)
     assert.strictEqual(sets[0].OnlineID, 506483)
 
-    const bms = osu.beatmaps.all()
+    const bms = osu.beatmaps.get.all()
     assert.strictEqual(bms.length, 4)
 
     const easy = bms.find(b => b.DifficultyName === 'Easy')
@@ -52,7 +53,7 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
 
   it('reads full beatmap data back from files folder', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const sets = osu.sets.all()
+    const sets = osu.sets.get.all()
     const data = osu.beatmap.getFullDataSet(String(sets[0].ID))
     assert.ok(data)
     assert.strictEqual(data!.beatmaps.length, 4)
@@ -63,7 +64,7 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
 
   it('exports .osz with identical file hashes', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const sets = osu.sets.all()
+    const sets = osu.sets.get.all()
     const exportPath = join(tmpRoot, 'exported.osz')
     await osu.osz.export(String(sets[0].ID), exportPath)
     assert.ok(existsSync(exportPath))
@@ -105,9 +106,9 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
 
   it('upserts by OnlineID without duplicating', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const before = osu.sets.all().length
+    const before = osu.sets.get.all().length
     await osu.osz.import(SAMPLE_OSZ)
-    const after = osu.sets.all().length
+    const after = osu.sets.get.all().length
     assert.strictEqual(after, before)
     osu.close()
   })

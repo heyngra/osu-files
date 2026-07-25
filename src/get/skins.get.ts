@@ -2,6 +2,13 @@ import Realm from 'realm'
 import type { Skin } from '../schema/types.js'
 import { BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from '../skin/constants.js'
 
+/**
+ * Creates skin query helpers.
+ * @param realm - The Realm instance.
+ * @returns An object with methods to query skins by id, name, creator, hash, and built-in or usable subsets.
+ * @example
+ * const skins = createSkinGetModule(realm).usable()
+ */
 export function createSkinGetModule(realm: Realm) {
   return {
     all: (): Skin[] => [...realm.objects<Skin>('Skin')],

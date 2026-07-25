@@ -2,15 +2,16 @@ import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from '../osz/types.js'
-import type { BeatmapSet, Beatmap, Ruleset, RealmFile } from '../schema/types.js'
+import type { BeatmapSet, Beatmap } from '../schema/types.js'
+import { LogAction } from './logger.js'
 
 const MODE_TO_SHORTNAME: Record<number, string> = {
   0: 'osu', 1: 'taiko', 2: 'fruits', 3: 'mania',
 }
 
-function resolveRulesetByMode(realm: Realm, mode: number): Ruleset | undefined {
-  const sn = MODE_TO_SHORTNAME[mode]
-  return sn ? realm.objectForPrimaryKey<Ruleset>('Ruleset', sn) ?? undefined : undefined
+function resolveRulesetByMode(ctx: OsuFilesContext, mode: number) {
+  const shortName = MODE_TO_SHORTNAME[mode]
+  return shortName ? ctx.rulesets.get.byShortName(shortName) ?? undefined : undefined
 }
 
 const STANDARD_RULESETS = [
@@ -20,6 +21,7 @@ const STANDARD_RULESETS = [
   { ShortName: 'mania', OnlineID: 3, Name: 'osu!mania', InstantiationInfo: 'osu.Game.Rulesets.Mania.ManiaRuleset, osu.Game.Rulesets.Mania', Available: true, LastAppliedDifficultyVersion: 0 },
 ]
 
+/** A beatmap entry within an import set input. */
 export type ImportSetBeatmap = {
   filename: string
   hash: string
@@ -27,6 +29,7 @@ export type ImportSetBeatmap = {
   osuBeatmap: OsuBeatmap
 }
 
+/** Input shape for importing a beatmap set into Realm. */
 export type ImportSetInput = {
   onlineID: number
   setHash: string
@@ -36,140 +39,136 @@ export type ImportSetInput = {
   beatmaps: ImportSetBeatmap[]
 }
 
+/**
+ * Imports a beatmap set (beatmaps + files) into the Realm database.
+ * @returns Imported beatmap set data.
+ * @example
+ * importSet(ctx, { onlineID: 123, setHash: 'abc', status: 0, protected: false, files: [...], beatmaps: [...] })
+ */
 export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapSetData {
-  const { realm, logger } = ctx
+  const { logger } = ctx
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
-  if (onlineID > 0) {
-    existingSet = realm.objects<BeatmapSet>('BeatmapSet').filtered('OnlineID == $0', onlineID)[0] ?? null
-  }
-  if (!existingSet && setHash) {
-    existingSet = realm.objects<BeatmapSet>('BeatmapSet').filtered('Hash == $0', setHash)[0] ?? null
-  }
+  if (onlineID > 0) existingSet = ctx.sets.get.byOnlineId(onlineID) ?? null
+  if (!existingSet && setHash) existingSet = ctx.sets.get.byHash(setHash) ?? null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
   const before = existingSet
     ? { onlineID: existingSet.OnlineID, hash: existingSet.Hash ?? '', beatmaps: existingSet.Beatmaps.length, files: existingSet.Files.length }
     : null
 
-  realm.write(() => {
-    for (const rs of STANDARD_RULESETS) {
-      if (!realm.objectForPrimaryKey('Ruleset', rs.ShortName)) {
-        realm.create('Ruleset', rs)
-      }
+  for (const rs of STANDARD_RULESETS) {
+    if (!ctx.rulesets.get.byShortName(rs.ShortName)) {
+      ctx.rulesets.write.create(rs)
     }
+  }
 
-    if (existingSet) {
-      const oldBeatmaps = [...existingSet.Beatmaps]
-      for (const b of oldBeatmaps) {
-        if (b.Metadata) realm.delete(b.Metadata)
-        realm.delete(b)
-      }
-      existingSet.Beatmaps = []
-      existingSet.Files = []
+  if (existingSet) {
+    for (const b of [...existingSet.Beatmaps]) {
+      const metadataId = b.Metadata?.ID
+      ctx.beatmaps.write.delete(b.ID)
+      if (metadataId) ctx.metadata.write.delete(metadataId)
     }
+  }
 
-    for (const f of files) {
-      if (!realm.objectForPrimaryKey<RealmFile>('File', f.hash)) {
-        realm.create('File', { Hash: f.hash })
-      }
+  for (const f of files) {
+    if (!ctx.files.get.byHash(f.hash)) {
+      ctx.files.write.upsert({ Hash: f.hash })
     }
+  }
 
-    const namedFileEntries = files
-      .filter(f => realm.objectForPrimaryKey<RealmFile>('File', f.hash))
-      .map(f => ({ File: realm.objectForPrimaryKey<RealmFile>('File', f.hash)!, Filename: f.filename }))
+  const namedFileEntries = files.map(f => ({ File: ctx.files.get.byHash(f.hash)!, Filename: f.filename }))
 
-    let beatmapSet: BeatmapSet
-    if (!existingSet) {
-      beatmapSet = realm.create<BeatmapSet>('BeatmapSet', {
-        ID: setUUID,
-        OnlineID: onlineID,
-        DateAdded: new Date(),
-        Beatmaps: [],
-        Files: namedFileEntries,
-        Status: status,
-        DeletePending: false,
-        Hash: setHash,
-        Protected: isProtected,
-      })
-    } else {
-      beatmapSet = existingSet
-      existingSet.OnlineID = onlineID
-      existingSet.Hash = setHash
-      for (const nfe of namedFileEntries) existingSet.Files.push(nfe)
-    }
+  let beatmapSet: BeatmapSet
+  if (!existingSet) {
+    beatmapSet = ctx.sets.write.create({
+      ID: setUUID,
+      OnlineID: onlineID,
+      DateAdded: new Date(),
+      Files: namedFileEntries,
+      Status: status,
+      DeletePending: false,
+      Hash: setHash,
+      Protected: isProtected,
+    })
+  } else {
+    ctx.sets.write.update(setUUID, {
+      OnlineID: onlineID,
+      Hash: setHash,
+      Files: namedFileEntries,
+    })
+    beatmapSet = existingSet
+  }
 
-    for (const entry of beatmaps) {
-      const bm = entry.osuBeatmap
-      const meta = bm.metadata
-      const diff = bm.difficulty
+  for (const entry of beatmaps) {
+    const bm = entry.osuBeatmap
+    const meta = bm.metadata
+    const diff = bm.difficulty
 
-      const metadataObj = realm.create('BeatmapMetadata', {
-        Title: meta.title || '',
-        TitleUnicode: meta.titleUnicode || '',
-        Artist: meta.artist || '',
-        ArtistUnicode: meta.artistUnicode || '',
-        Author: { OnlineID: 1, Username: meta.creator || '', CountryCode: 'Unknown' },
-        Source: meta.source || '',
-        Tags: meta.tags?.join(' ') || '',
-        PreviewTime: bm.general.previewTime ?? -1,
-        AudioFile: bm.general.audioFilename || '',
-        BackgroundFile: bm.events.find(e => e.type === 'background')?.filename ?? '',
-        UserTags: [],
-      })
+    const metadataObj = ctx.metadata.write.create({
+      ID: new Realm.BSON.UUID(),
+      Title: meta.title || '',
+      TitleUnicode: meta.titleUnicode || '',
+      Artist: meta.artist || '',
+      ArtistUnicode: meta.artistUnicode || '',
+      Author: { OnlineID: 1, Username: meta.creator || '', CountryCode: 'Unknown' },
+      Source: meta.source || '',
+      Tags: meta.tags?.join(' ') || '',
+      PreviewTime: bm.general.previewTime ?? -1,
+      AudioFile: bm.general.audioFilename || '',
+      BackgroundFile: bm.events.find(e => e.type === 'background')?.filename ?? '',
+      UserTags: [],
+    })
 
-      const ruleset = resolveRulesetByMode(realm, bm.general.mode)
-      if (!ruleset) continue
+    const ruleset = resolveRulesetByMode(ctx, bm.general.mode)
+    if (!ruleset) continue
 
-      const lastTime = bm.hitObjects.length > 0
-        ? Math.max(...bm.hitObjects.map(h => {
-            if (h.objectType === 'spinner' || h.objectType === 'hold') return h.extras.endTime
-            return h.time
-          }))
-        : 0
+    const lastTime = bm.hitObjects.length > 0
+      ? Math.max(...bm.hitObjects.map(h => {
+          if (h.objectType === 'spinner' || h.objectType === 'hold') return h.extras.endTime
+          return h.time
+        }))
+      : 0
 
-      const positiveTps = bm.timingPoints.filter(tp => tp.uninherited && tp.beatLength > 0)
-      const bpm = positiveTps.length > 0
-        ? Math.round(60000 / positiveTps.reduce((min, tp) => Math.min(min, tp.beatLength), Infinity) * 100) / 100
-        : 0
+    const positiveTps = bm.timingPoints.filter(tp => tp.uninherited && tp.beatLength > 0)
+    const bpm = positiveTps.length > 0
+      ? Math.round(60000 / positiveTps.reduce((min, tp) => Math.min(min, tp.beatLength), Infinity) * 100) / 100
+      : 0
 
-      const beatmapObj = realm.create<Beatmap>('Beatmap', {
-        ID: new Realm.BSON.UUID(),
-        DifficultyName: meta.version || '',
-        Ruleset: ruleset,
-        Difficulty: {
-          DrainRate: diff.hpDrainRate,
-          CircleSize: diff.circleSize,
-          OverallDifficulty: diff.overallDifficulty,
-          ApproachRate: diff.approachRate,
-          SliderMultiplier: diff.sliderMultiplier,
-          SliderTickRate: diff.sliderTickRate,
-        },
-        Metadata: metadataObj,
-        BeatmapSet: beatmapSet,
-        Status: 1,
-        OnlineID: meta.beatmapID ?? -1,
-        Length: lastTime,
-        BPM: bpm,
-        Hash: entry.hash,
-        StarRating: -1,
-        MD5Hash: entry.md5Hash,
-        Hidden: false,
-        BeatDivisor: bm.editor?.beatDivisor ?? 4,
-        UserSettings: { Offset: 0 },
-        OnlineMD5Hash: '',
-        LastLocalUpdate: new Date(),
-        EndTimeObjectCount: bm.hitObjects.filter(h => h.objectType === 'spinner' || h.objectType === 'hold').length,
-        TotalObjectCount: bm.hitObjects.length,
-      })
-
-      beatmapSet.Beatmaps.push(beatmapObj)
-    }
-  })
+    ctx.beatmaps.write.create({
+      ID: new Realm.BSON.UUID(),
+      DifficultyName: meta.version || '',
+      Ruleset: ruleset,
+      Difficulty: {
+        DrainRate: diff.hpDrainRate,
+        CircleSize: diff.circleSize,
+        OverallDifficulty: diff.overallDifficulty,
+        ApproachRate: diff.approachRate,
+        SliderMultiplier: diff.sliderMultiplier,
+        SliderTickRate: diff.sliderTickRate,
+      },
+      Metadata: metadataObj,
+      BeatmapSet: beatmapSet,
+      Status: 1,
+      OnlineID: meta.beatmapID ?? -1,
+      Length: lastTime,
+      BPM: bpm,
+      Hash: entry.hash,
+      StarRating: -1,
+      MD5Hash: entry.md5Hash,
+      Hidden: false,
+      BeatDivisor: bm.editor?.beatDivisor ?? 4,
+      UserSettings: { Offset: 0 },
+      OnlineMD5Hash: '',
+      LastLocalUpdate: new Date(),
+      EndTimeObjectCount: bm.hitObjects.filter(h => h.objectType === 'spinner' || h.objectType === 'hold').length,
+      TotalObjectCount: bm.hitObjects.length,
+    })
+  }
 
   const after = { onlineID, setHash, beatmaps: beatmaps.length, files: files.length }
-  logger.log('BeatmapSet', existingSet ? 'update' : 'create', String(setUUID), before, after)
+  logger.log('BeatmapSet', existingSet ? LogAction.Update : LogAction.Create, String(setUUID), before, after)
 
   return {
     onlineID,

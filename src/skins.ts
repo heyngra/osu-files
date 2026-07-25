@@ -25,6 +25,11 @@ function getNextBestSkinName(existingNames: Iterable<string>, desiredName: strin
   return best === 0 ? desiredName : `${desiredName} (${best})`
 }
 
+/**
+ * Creates the skin sub-module with query, write, import/export, and lifecycle operations.
+ * @example
+ * const skin = db.skins.get.byId(id)
+ */
 export function createSkinModule(ctx: OsuFilesContext) {
   const get = createSkinGetModule(ctx.realm)
   const write = createCrud<Skin>(ctx, getConfig('Skin')!)
@@ -32,7 +37,6 @@ export function createSkinModule(ctx: OsuFilesContext) {
   const filesWrite = createCrud<RealmFile>(ctx, getConfig('File')!)
 
   return {
-    ...get,
     get,
     write,
 
@@ -117,3 +121,6 @@ export function createSkinModule(ctx: OsuFilesContext) {
     },
   }
 }
+
+/** Skin sub-module with query, write, import/export, and lifecycle operations. */
+export type SkinModule = ReturnType<typeof createSkinModule>

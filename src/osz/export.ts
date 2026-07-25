@@ -1,17 +1,23 @@
 import { readFileSync, createWriteStream } from 'fs'
-import Realm from 'realm'
 import { ZipFile } from 'yazl'
 import type { OsuFilesContext } from '../context.js'
 import { serializeOsu } from '../beatmap/serialize.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from './types.js'
-import type { BeatmapSet } from '../schema/types.js'
 import { fileStoragePath } from '../util.js'
 
+/** Options for beatmap set export. */
 export type ExportOptions = {
+  /** Override beatmap content for specific difficulties. */
   beatmaps?: OsuBeatmap[]
 }
 
+/**
+ * Exports a beatmap set to an .osz file on disk.
+ * @throws If filesFolderPath is missing or set not found.
+ * @example
+ * exportOsz(ctx, setId, './out.osz', { beatmaps: [modifiedBeatmap] })
+ */
 export async function exportOsz(
   ctx: OsuFilesContext,
   setID: string,
@@ -20,7 +26,7 @@ export async function exportOsz(
 ): Promise<void> {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for export')
 
-  const set = ctx.realm.objectForPrimaryKey<BeatmapSet>('BeatmapSet', new Realm.BSON.UUID(setID))
+  const set = ctx.sets.get.byId(setID)
   if (!set) throw new Error(`BeatmapSet '${setID}' not found`)
 
   const zip = new ZipFile()
@@ -66,6 +72,12 @@ function findOverrideByFilename(filename: string, overrides: Map<string, OsuBeat
   return undefined
 }
 
+/**
+ * Exports BeatmapSetData to an .osz file on disk.
+ * @throws If filesFolderPath is missing.
+ * @example
+ * exportOszFromData(ctx, beatmapSetData, './out.osz')
+ */
 export async function exportOszFromData(
   ctx: OsuFilesContext,
   data: BeatmapSetData,

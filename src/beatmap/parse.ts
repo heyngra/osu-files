@@ -44,16 +44,22 @@ function parseSplitInts(v: string, sep: string): number[] {
   return v.split(sep).map(s => parseInt(s.trim()))
 }
 
-function parseSplitFloats(v: string, sep: string): number[] {
-  if (!v) return []
-  return v.split(sep).map(s => parseFloat(s.trim()))
-}
-
+/**
+ * Parses .osu file content into a structured OsuBeatmap object.
+ * @returns Parsed beatmap object.
+ * @example
+ * parseOsu(fs.readFileSync('song.osu', 'utf-8'))
+ */
 export function parseOsu(content: string): OsuBeatmap {
   const lines = content.split(/\r?\n/)
 
   let fileFormat = 14
   let currentSection: Section | null = null
+
+  const headerMatch = lines[0]?.match(HEADER_RE)
+  if (headerMatch) fileFormat = parseInt(headerMatch[1])
+
+  const timingOffset = fileFormat < 5 ? 24 : 0
 
   const general: Partial<OsuGeneral> = {
     audioFilename: '',
@@ -116,7 +122,7 @@ export function parseOsu(content: string): OsuBeatmap {
 
     switch (currentSection) {
       case 'General':
-        parseGeneralLine(line, general)
+        parseGeneralLine(line, general, timingOffset)
         break
       case 'Editor':
         editor = editor ?? {}
@@ -136,17 +142,17 @@ export function parseOsu(content: string): OsuBeatmap {
           storyboardLines.push(line)
         } else {
           inStoryboardLayer = false
-          parseEventLine(line, events, storyboardLines)
+          parseEventLine(line, events, storyboardLines, timingOffset)
         }
         break
       case 'TimingPoints':
-        parseTimingPointLine(line, timingPoints)
+        parseTimingPointLine(line, timingPoints, timingOffset)
         break
       case 'Colours':
         parseColourLine(line, colours)
         break
       case 'HitObjects':
-        parseHitObjectLine(line, hitObjects)
+        parseHitObjectLine(line, hitObjects, timingOffset)
         break
     }
   }
@@ -168,14 +174,18 @@ export function parseOsu(content: string): OsuBeatmap {
   }
 }
 
-function parseGeneralLine(line: string, g: Partial<OsuGeneral>): void {
+function parseGeneralLine(line: string, g: Partial<OsuGeneral>, timingOffset = 0): void {
   const m = line.match(KEYVAL_RE)
   if (!m) return
   const val = m[2].trim()
   switch (m[1].trim()) {
     case 'AudioFilename': g.audioFilename = val; break
     case 'AudioLeadIn': g.audioLeadIn = parseInt(val); break
-    case 'PreviewTime': g.previewTime = parseInt(val); break
+    case 'PreviewTime': {
+      const pt = parseInt(val)
+      g.previewTime = pt === -1 ? pt : pt + timingOffset
+      break
+    }
     case 'Countdown': g.countdown = parseInt(val); break
     case 'SampleSet': g.sampleSet = val.toLowerCase(); break
     case 'StackLeniency': g.stackLeniency = parseFloat(val); break
@@ -239,7 +249,7 @@ function parseDifficultyLine(line: string, d: Partial<OsuDifficulty>): void {
   }
 }
 
-function parseEventLine(line: string, events: OsuEvent[], sbLines: string[]): void {
+function parseEventLine(line: string, events: OsuEvent[], sbLines: string[], timingOffset = 0): void {
   if (sbLines.length > 0) {
     events.push({ type: 'storyboard', raw: sbLines.join('\n') })
     sbLines.length = 0
@@ -271,8 +281,8 @@ function parseEventLine(line: string, events: OsuEvent[], sbLines: string[]): vo
     case 2: {
       events.push({
         type: 'break',
-        startTime: parseInt(parts[1]?.trim()) || 0,
-        endTime: parseInt(parts[2]?.trim()) || 0,
+        startTime: (parseInt(parts[1]?.trim()) || 0) + timingOffset,
+        endTime: (parseInt(parts[2]?.trim()) || 0) + timingOffset,
       })
       break
     }
@@ -283,13 +293,13 @@ function parseEventLine(line: string, events: OsuEvent[], sbLines: string[]): vo
   }
 }
 
-function parseTimingPointLine(line: string, points: TimingPoint[]): void {
+function parseTimingPointLine(line: string, points: TimingPoint[], timingOffset = 0): void {
   const parts = line.split(',')
   if (parts.length < 2) return
 
   const beatLength = parseFloat(parts[1].trim())
   points.push({
-    time: parseFloat(parts[0].trim()),
+    time: parseFloat(parts[0].trim()) + timingOffset,
     beatLength: Math.abs(beatLength),
     meter: parseInt(parts[2]?.trim()) || 4,
     sampleSet: parseInt(parts[3]?.trim()) || 0,
@@ -311,24 +321,14 @@ function parseColourLine(line: string, colours: OsuColour[]): void {
   })
 }
 
-function splitExtras(str: string): string {
-  let depth = 0
-  for (let i = 0; i < str.length; i++) {
-    const ch = str[i]
-    if (ch === '|') depth++
-    else if (ch === ':') { if (depth > 0) depth--; else return str.substring(i) }
-    else if (ch === ',') return str.substring(i)
-  }
-  return ''
-}
 
-function parseHitObjectLine(line: string, objects: HitObject[]): void {
+function parseHitObjectLine(line: string, objects: HitObject[], timingOffset = 0): void {
   const parts = line.split(',')
   if (parts.length < 5) return
 
   const x = parseInt(parts[0].trim())
   const y = parseInt(parts[1].trim())
-  const time = parseInt(parts[2].trim())
+  const time = parseInt(parts[2].trim()) + timingOffset
   const type = parseInt(parts[3].trim())
   const hitSound = parseInt(parts[4].trim())
   const isNewCombo = (type & 4) !== 0
@@ -341,11 +341,11 @@ function parseHitObjectLine(line: string, objects: HitObject[]): void {
   const rawExtras = parts.slice(5).join(',')
 
   if (type & 8) {
-    objects.push(parseSpinner(base, rawExtras))
+    objects.push(parseSpinner(base, rawExtras, timingOffset))
   } else if (type & 2) {
     objects.push(parseSlider(base, rawExtras))
   } else if (type & 128) {
-    objects.push(parseHold(base, rawExtras))
+    objects.push(parseHold(base, rawExtras, timingOffset))
   } else {
     objects.push(parseCircle(base, rawExtras))
   }
@@ -427,14 +427,14 @@ function parseSlider(base: HitObjectBase, extras: string): HitSlider {
   return { ...base, objectType: 'slider', extras: sliderExtras }
 }
 
-function parseSpinner(base: HitObjectBase, extras: string): HitSpinner {
+function parseSpinner(base: HitObjectBase, extras: string, timingOffset = 0): HitSpinner {
   const parts = extras.split(',')
   const tailParts = (parts[1] ?? '').split(':')
   return {
     ...base,
     objectType: 'spinner',
     extras: {
-      endTime: parseInt(parts[0]) || 0,
+      endTime: (parseInt(parts[0]) || 0) + timingOffset,
       sampleSet: tailParts[0] ? parseInt(tailParts[0]) : undefined,
       additionSet: tailParts[1] ? parseInt(tailParts[1]) : undefined,
       customIndex: tailParts[2] ? parseInt(tailParts[2]) : undefined,
@@ -444,14 +444,14 @@ function parseSpinner(base: HitObjectBase, extras: string): HitSpinner {
   }
 }
 
-function parseHold(base: HitObjectBase, extras: string): HitHold {
+function parseHold(base: HitObjectBase, extras: string, timingOffset = 0): HitHold {
   const parts = extras.split(',')
   const tailParts = (parts[1] ?? '').split(':')
   return {
     ...base,
     objectType: 'hold',
     extras: {
-      endTime: parseInt(parts[0]) || 0,
+      endTime: (parseInt(parts[0]) || 0) + timingOffset,
       sampleSet: tailParts[0] ? parseInt(tailParts[0]) : undefined,
       additionSet: tailParts[1] ? parseInt(tailParts[1]) : undefined,
       customIndex: tailParts[2] ? parseInt(tailParts[2]) : undefined,

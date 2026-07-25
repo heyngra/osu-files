@@ -1,5 +1,16 @@
-export type SkinIniColour = [number, number, number]
+type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
+  ? Acc[number]
+  : Enumerate<N, [...Acc, Acc['length']]>
 
+type Range<F extends number, T extends number> = Exclude<Enumerate<T>, Enumerate<F>>
+
+/** An RGB colour tuple [r, g, b]. */
+export type SkinIniColour = [Range<0,255>, Range<0,255>, Range<0,255>]
+
+/** [General] section of skin.ini.
+ * @example
+ * { name: 'WhiteCat', author: 'cyperdark', version: '2.5', animationFramerate: 60, cursorExpand: false, cursorCentre: true, allowSliderBallTint: true, sliderStyle: 2 }
+ */
 export type SkinIniGeneral = {
   name?: string
   author?: string
@@ -16,6 +27,7 @@ export type SkinIniGeneral = {
   sliderStyle?: number
 }
 
+/** [Colours] section of skin.ini. */
 export type SkinIniColours = {
   combo?: SkinIniColour[]
   menuGlow?: SkinIniColour
@@ -27,6 +39,7 @@ export type SkinIniColours = {
   spinnerBackground?: SkinIniColour
 }
 
+/** [Fonts] section of skin.ini. */
 export type SkinIniFonts = {
   hitCirclePrefix?: string
   hitCircleOverlap?: number
@@ -36,11 +49,13 @@ export type SkinIniFonts = {
   comboOverlap?: number
 }
 
+/** [CatchTheBeat] section of skin.ini. */
 export type SkinIniCatchTheBeat = {
   hyperDashColour?: SkinIniColour
   hyperDashTargetColour?: SkinIniColour
 }
 
+/** [Mania] section of skin.ini. */
 export type SkinIniMania = {
   keys?: number
   keyLayout?: string
@@ -54,6 +69,12 @@ export type SkinIniMania = {
   noteBodyStyle?: number
 }
 
+/**
+ * Parsed skin.ini data.
+ * @example
+ * const ini = parseSkinIni(content)
+ * console.log(ini.general.name)
+ */
 export type SkinIni = {
   raw: Record<string, Record<string, string>>
   general: SkinIniGeneral
@@ -66,7 +87,7 @@ export type SkinIni = {
 function parseColour(value: string): SkinIniColour | undefined {
   const parts = value.split(',').map(s => parseInt(s.trim(), 10))
   if (parts.length === 3 && parts.every(n => !isNaN(n) && n >= 0 && n <= 255))
-    return [parts[0], parts[1], parts[2]]
+    return [parts[0], parts[1], parts[2]] as SkinIniColour
   return undefined
 }
 
@@ -82,6 +103,12 @@ function parseBool(value: string): boolean | undefined {
   return undefined
 }
 
+/**
+ * Parses a skin.ini file into structured data.
+ * @returns Parsed skin.ini data.
+ * @example
+ * parseSkinIni(fs.readFileSync('skin.ini', 'utf-8'))
+ */
 export function parseSkinIni(content: string): SkinIni {
   const raw: Record<string, Record<string, string>> = {}
   let currentSection = ''

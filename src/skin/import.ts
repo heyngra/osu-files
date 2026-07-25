@@ -6,6 +6,7 @@ import { parseSkinIni } from './skin-ini.js'
 
 const HASHABLE_SKIN_EXTS = ['.ini', '.json']
 
+/** Summary of an imported .osk skin. */
 export type ImportedSkinData = {
   id: string
   name: string
@@ -14,6 +15,7 @@ export type ImportedSkinData = {
   files: number
 }
 
+/** Raw data extracted from an .osk archive. */
 export type ImportSkinEntries = {
   entries: Array<{ filename: string; hash: string; buffer: Buffer }>
   skinHash: string
@@ -22,6 +24,13 @@ export type ImportSkinEntries = {
   instantiationInfo: string
 }
 
+/**
+ * Reads .osk file entries and stores them on disk, returning parsed skin metadata.
+ * @returns Extracted skin entries with metadata.
+ * @throws If archive is empty.
+ * @example
+ * importOskEntries('/path/to/skin.osk', filesFolderPath) // { entries: [...], skinHash: '...', name: 'My Skin', ... }
+ */
 export async function importOskEntries(filePath: string, filesFolderPath: string): Promise<ImportSkinEntries> {
   const entries = await readZipEntries(filePath)
   if (entries.length === 0) throw new Error('Empty archive')

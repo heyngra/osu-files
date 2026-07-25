@@ -1,7 +1,7 @@
 import type {
   OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,
   OsuEvent, TimingPoint, OsuColour, HitObject, HitCircle, HitSlider,
-  HitSpinner, HitHold, SliderExtras, SliderCurveType,
+  HitSpinner, HitHold, SliderExtras, SliderCurveType, DurationHitObjectExtras,
 } from './types.js'
 
 function fmt(n: number): string {
@@ -139,13 +139,17 @@ function serializeCircleExtras(h: HitCircle): string {
   return `${h.sampleSet ?? 0}:${h.additionSet ?? 0}:${h.customIndex ?? 0}:${h.sampleVolume ?? 0}:${h.filename ?? ''}`
 }
 
+function serializeDurationExtrasTail(d: DurationHitObjectExtras): string {
+  return `${d.sampleSet ?? 0}:${d.additionSet ?? 0}:${d.customIndex ?? 0}:${d.sampleVolume ?? 0}:${d.filename ?? ''}`
+}
+
 function serializeSpinnerExtras(h: HitSpinner): string {
-  const tail = `${h.extras.sampleSet ?? 0}:${h.extras.additionSet ?? 0}:${h.extras.customIndex ?? 0}:${h.extras.sampleVolume ?? 0}:${h.extras.filename ?? ''}`
+  const tail = serializeDurationExtrasTail(h.extras)
   return `${h.extras.endTime},${tail}`
 }
 
 function serializeHoldExtras(h: HitHold): string {
-  const tail = `${h.extras.sampleSet ?? 0}:${h.extras.additionSet ?? 0}:${h.extras.customIndex ?? 0}:${h.extras.sampleVolume ?? 0}:${h.extras.filename ?? ''}`
+  const tail = serializeDurationExtrasTail(h.extras)
   return `${h.extras.endTime},${tail}`
 }
 
@@ -168,6 +172,12 @@ function writeHitObjects(objects: HitObject[]): string {
   return lines.join('\n')
 }
 
+/**
+ * Serializes an OsuBeatmap back to .osu text format.
+ * @returns .osu file content as string.
+ * @example
+ * serializeOsu(beatmap) // 'osu file format v14\\n\\n[General]...'
+ */
 export function serializeOsu(beatmap: OsuBeatmap): string {
   const sections: string[] = [
     `osu file format v${beatmap.fileFormat}`,

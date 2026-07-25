@@ -19,10 +19,11 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",
-    "test": "node --import tsx --test --test-force-exit src/index.test.ts tests/*.test.ts",
+    "test": "node --import tsx --test --test-force-exit tests/*.test.ts",
     "test:int": "tsx --test tests/**/*.test.ts"
   },
   "dependencies": {
+    "lzma-web": "^3.0.1",
     "realm": "^20.1.0",
     "yauzl": "^3.4.0",
     "yazl": "^3.3.1"

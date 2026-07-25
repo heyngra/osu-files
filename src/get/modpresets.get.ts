@@ -1,6 +1,13 @@
 import type Realm from 'realm'
 import type { ModPreset } from '../schema/types.js'
 
+/**
+ * Creates mod preset query helpers.
+ * @param realm - The Realm instance.
+ * @returns An object with methods to query mod presets by id or ruleset.
+ * @example
+ * const presets = createModPresetGetModule(realm).byRuleset('osu')
+ */
 export function createModPresetGetModule(realm: Realm) {
   return {
     all: (): ModPreset[] => [...realm.objects<ModPreset>('ModPreset')],

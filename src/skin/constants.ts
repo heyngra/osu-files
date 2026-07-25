@@ -1,3 +1,4 @@
+/** UUIDs of the six built-in osu!lazer skins. */
 export const BUILT_IN_SKINS = {
   TRIANGLES: '2991cfd8-2140-469a-bcb9-2ec23fbce4ad',
   ARGON: 'cffa69de-b3e3-4dee-8563-3c4f425c05d0',
@@ -9,6 +10,7 @@ export const BUILT_IN_SKINS = {
 
 export const BUILT_IN_SKIN_IDS: readonly string[] = Object.values(BUILT_IN_SKINS)
 
+/** Ordered list of built-in skin UUIDs for display. */
 export const BUILT_IN_SKIN_ORDER: readonly string[] = [
   BUILT_IN_SKINS.ARGON,
   BUILT_IN_SKINS.ARGON_PRO,

@@ -1,17 +1,20 @@
 import { readFileSync } from 'fs'
-import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
 import { parseOsu } from './parse.js'
-import { serializeOsu } from './serialize.js'
 import type { OsuBeatmap } from './types.js'
 import type { BeatmapSetData, BeatmapSetFile } from '../osz/types.js'
-import type { Beatmap, BeatmapSet } from '../schema/types.js'
 import { fileStoragePath } from '../util.js'
 
+/**
+ * Reads a stored .osu file from disk and parses it.
+ * @returns The parsed beatmap, or undefined if not found.
+ * @example
+ * realmBeatmapToOsuBeatmap(ctx, beatmapId) // OsuBeatmap or undefined
+ */
 export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string): OsuBeatmap | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const beatmap = ctx.realm.objectForPrimaryKey<Beatmap>('Beatmap', new Realm.BSON.UUID(beatmapId))
+  const beatmap = ctx.beatmaps.get.byId(beatmapId)
   if (!beatmap) return undefined
 
   const hash = beatmap.Hash ?? ''
@@ -33,10 +36,16 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
   return parsed
 }
 
+/**
+ * Builds full BeatmapSetData from a Realm beatmap set, including all beatmaps and files.
+ * @returns The parsed beatmap set data, or undefined if not found.
+ * @example
+ * realmSetToBeatmapSetData(ctx, setId) // { onlineID: 123, beatmaps: [...], files: [...] }
+ */
 export function realmSetToBeatmapSetData(ctx: OsuFilesContext, setId: string): BeatmapSetData | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const set = ctx.realm.objectForPrimaryKey<BeatmapSet>('BeatmapSet', new Realm.BSON.UUID(setId))
+  const set = ctx.sets.get.byId(setId)
   if (!set) return undefined
 
   const files: BeatmapSetFile[] = []
@@ -59,48 +68,5 @@ export function realmSetToBeatmapSetData(ctx: OsuFilesContext, setId: string): B
     beatmaps,
     files,
     setHash: set.Hash ?? undefined,
-  }
-}
-
-export function osuBeatmapToRealmPayload(
-  osu: OsuBeatmap,
-  existingHash?: string,
-  existingMd5?: string,
-): Record<string, unknown> {
-  const lastTime = osu.hitObjects.length > 0
-    ? Math.max(...osu.hitObjects.map(h => {
-        if (h.objectType === 'spinner' || h.objectType === 'hold') return h.extras.endTime
-        return h.time
-      }))
-    : 0
-
-  const positiveTps = osu.timingPoints.filter(tp => tp.uninherited && tp.beatLength > 0)
-  const bpm = positiveTps.length > 0
-    ? Math.round(60000 / positiveTps.reduce((min, tp) => Math.min(min, tp.beatLength), Infinity) * 100) / 100
-    : 0
-
-  return {
-    DifficultyName: osu.metadata.version || '',
-    Difficulty: {
-      DrainRate: osu.difficulty.hpDrainRate,
-      CircleSize: osu.difficulty.circleSize,
-      OverallDifficulty: osu.difficulty.overallDifficulty,
-      ApproachRate: osu.difficulty.approachRate,
-      SliderMultiplier: osu.difficulty.sliderMultiplier,
-      SliderTickRate: osu.difficulty.sliderTickRate,
-    },
-    Status: 1,
-    OnlineID: osu.metadata.beatmapID ?? -1,
-    Length: lastTime,
-    BPM: bpm,
-    Hash: existingHash ?? '',
-    StarRating: -1,
-    MD5Hash: existingMd5 ?? '',
-    Hidden: false,
-    BeatDivisor: osu.editor?.beatDivisor ?? 4,
-    UserSettings: { Offset: 0 },
-    OnlineMD5Hash: '',
-    EndTimeObjectCount: osu.hitObjects.filter(h => h.objectType === 'spinner' || h.objectType === 'hold').length,
-    TotalObjectCount: osu.hitObjects.length,
   }
 }

@@ -1,7 +1,7 @@
 import { existsSync } from 'fs'
-import { join } from 'path'
 import type { OsuFilesContext } from '../context.js'
-import { snapshot } from './logger.js'
+import { fileStoragePath } from '../util.js'
+import { snapshot, LogAction } from './logger.js'
 import { ValidationError, required, unique, resolveRef } from './validate.js'
 
 export type DeleteGuard = {
@@ -35,10 +35,6 @@ export type EntityConfig<T> = {
   guards?: DeleteGuard[]
 }
 
-function hashFilePath(base: string, hash: string): string {
-  return join(base, hash[0], hash.substring(0, 2), hash)
-}
-
 /**
  * Creates a {@link create | CRUD} helper for a Realm entity type.
  *
@@ -66,14 +62,14 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
       if (ctx.checkHash && !ctx.filesFolderPath) throw new ValidationError(`Can't verify hash, no files folder set.`)
       
       if (ctx.checkHash && ctx.filesFolderPath && input.Hash) {
-        const fp = hashFilePath(ctx.filesFolderPath, input.Hash as string)
+        const fp = fileStoragePath(ctx.filesFolderPath, input.Hash as string)
         if (!existsSync(fp))
           throw new ValidationError(`File not found: ${fp}`)
       }
 
       let created: T
       ctx.realm.write(() => { created = ctx.realm.create<T>(cfg.name, data as never) })
-      ctx.logger.log(cfg.name, 'create', String(input[cfg.pk] ?? '(nil)'), null, created!)
+      ctx.logger.log(cfg.name, LogAction.Create, String(input[cfg.pk] ?? '(nil)'), null, created!)
       return created!
     },
 
@@ -89,7 +85,7 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
         if (field in patch) data[field] = resolveRef(ctx.realm, type, patch[field] as never)
 
       if (ctx.checkHash && ctx.filesFolderPath && patch.Hash) {
-        const fp = hashFilePath(ctx.filesFolderPath, patch.Hash as string)
+        const fp = fileStoragePath(ctx.filesFolderPath, patch.Hash as string)
         if (!existsSync(fp))
           throw new ValidationError(`File not found: ${fp}`)
       }
@@ -100,7 +96,7 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
           ;(existing as any)[key] = data[key]
         }
       })
-      ctx.logger.log(cfg.name, 'update', id, before, snapshot(ctx.realm, cfg.name, id))
+      ctx.logger.log(cfg.name, LogAction.Update, id, before, snapshot(ctx.realm, cfg.name, id))
       return existing
     },
 
@@ -116,7 +112,7 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
 
       const before = snapshot(ctx.realm, cfg.name, id)
       ctx.realm.write(() => { ctx.realm.delete(existing as never) })
-      ctx.logger.log(cfg.name, 'delete', id, before, null)
+      ctx.logger.log(cfg.name, LogAction.Delete, id, before, null)
       return true
     },
 
