@@ -8,7 +8,6 @@ import { MODE_SHORTNAME, LegacyModsFlag, MOD_FLAG_MAP, RANK } from './types.js'
 import { parseOsu } from '../beatmap/parse.js'
 import type { LegacyScoreAttributes, LegacyBeatmapConversionDifficultyInfo } from './legacy-conversion.js'
 import { computeLegacyScoreAttributes, convertFromLegacyTotalScore, roundHalfEven } from './legacy-conversion.js'
-import { LogAction } from '../write/logger.js'
 import type { Score } from '../schema/types.js'
 
 /**
@@ -323,12 +322,6 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
       Pauses: parsed.parsedExtra?.pauses ?? [],
       Files: files,
     })
-
-  ctx.logger.log('Score', LogAction.Create, String(scoreId), null, {
-    onlineID: onlineId > 0 ? onlineId : parsed.onlineScoreID,
-    beatmapMD5: parsed.beatmapMD5,
-    playerName: parsed.playerName,
-  })
 
   return parsed
 }

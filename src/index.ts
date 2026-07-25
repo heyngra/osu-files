@@ -22,7 +22,8 @@ import { createFileModule } from './files.js'
 import { createKeyBindingModule } from './keybindings.js'
 import { createModPresetModule } from './modpresets.js'
 import { createBeatmapMetadataModule } from './metadata.js'
-import { RollbackLogger, type ChangeLogEntry, type RollbackOptions } from './write/logger.js'
+import { RollbackLogger, RollbackEntry, type RollbackOptions } from './write/logger.js'
+import { getConfig } from './write/factory.js'
 import { importOsz } from './osz/import.js'
 import { exportOsz, exportOszFromData } from './osz/export.js'
 import type { BeatmapSetData } from './osz/types.js'
@@ -39,7 +40,7 @@ import type { ImportedSkinData } from './skin/import.js'
 
 export * from './schema/index.js'
 export type { OsuFilesContext }
-export type { ChangeLogEntry, RollbackOptions }
+export { RollbackEntry, type RollbackOptions }
 export { hasFilesFolder } from './context.js'
 export { BUILT_IN_SKINS, BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from './skin/constants.js'
 export type { ImportedSkinData } from './skin/import.js'
@@ -64,19 +65,8 @@ export type OsuFilesAPI = {
   ctx: OsuFilesContext
   /** Closes the Realm connection and disables rollback logging. */
   close(): void
-  /** Rollback log for write operations. */
-  rollback: {
-    /** Returns all change log entries. */
-    readonly entries: readonly ChangeLogEntry[]
-    /** Whether rollback logging is active. */
-    readonly enabled: boolean
-    /** Reverts all logged changes in reverse order. */
-    revert(): void
-    /** Reverts the most recent logged change. */
-    revertLast(): boolean
-    /** Disables rollback logging and clears the log. */
-    disable(): void
-  }
+  /** Rollback logger for inspecting and reverting write operations. */
+  logger: RollbackLogger
   /** Beatmap module for querying, creating, updating, and deleting beatmaps. */
   beatmaps: BeatmapModule
   /** Score module for querying, creating, updating, and deleting scores. */
@@ -182,7 +172,7 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
     readOnly,
   })
 
-  const logger = new RollbackLogger(rollbackOpts)
+  const logger = new RollbackLogger(rollbackOpts, realm, getConfig)
 
   const ctx = { realm, logger, filesFolderPath, checkHash } as OsuFilesContext
 
@@ -211,19 +201,8 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
       realm.close()
     },
 
-    /** Rollback log for write operations. */
-    rollback: {
-      /** Returns all change log entries. */
-      get entries(): readonly ChangeLogEntry[] { return logger.getEntries() },
-      /** Whether rollback logging is active. */
-      get enabled(): boolean { return logger.enabled },
-      /** Reverts all logged changes in reverse order. */
-      revert: () => logger.revert(),
-      /** Reverts the most recent logged change. */
-      revertLast: () => logger.revertLast(),
-      /** Disables rollback logging and clears the log. */
-      disable: () => logger.disable(),
-    },
+    /** Rollback logger for inspecting and reverting write operations. */
+    logger,
 
     /** Beatmap module for querying, creating, updating, and deleting beatmaps. */
     beatmaps,

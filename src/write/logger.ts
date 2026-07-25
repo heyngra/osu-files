@@ -1,6 +1,7 @@
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { writeFileSync, readdirSync, unlinkSync, statSync, existsSync, mkdirSync } from 'fs'
+import Realm from 'realm'
 
 /** Log action types for change tracking. */
 export enum LogAction {
@@ -12,14 +13,40 @@ export enum LogAction {
   Duplicate = 'duplicate',
 }
 
-/** Shape of a single change log entry. */
-export type ChangeLogEntry = {
-  timestamp: number
-  entity: string
-  action: LogAction
-  primaryKey: string
-  before: Record<string, unknown> | null
-  after: Record<string, unknown> | null
+/**
+ * A logged rollback entry with metadata about a single Realm write operation.
+ * Each entry can be inspected, serialised to string, or passed to rollback methods.
+ */
+export class RollbackEntry {
+  readonly timestamp: number
+  readonly entity: string
+  readonly action: LogAction
+  readonly primaryKey: string
+  readonly entryId: string
+  readonly before: Record<string, unknown> | null
+  readonly after: Record<string, unknown> | null
+
+  constructor(raw: {
+    timestamp: number
+    entity: string
+    action: LogAction
+    primaryKey: unknown
+    before: Record<string, unknown> | null
+    after: Record<string, unknown> | null
+  }) {
+    this.timestamp = raw.timestamp
+    this.entity = raw.entity
+    this.action = raw.action
+    this.primaryKey = String(raw.primaryKey)
+    this.entryId = `${raw.timestamp}_${raw.entity}_${raw.action}_${String(raw.primaryKey)}`
+    this.before = raw.before
+    this.after = raw.after
+  }
+
+  toString(): string {
+    const when = new Date(this.timestamp).toISOString().slice(0, 19).replace('T', ' ')
+    return `[${when}] ${this.action} ${this.entity} (${this.entryId})`
+  }
 }
 
 /** Options for configuring the rollback logger. */
@@ -32,6 +59,12 @@ export type RollbackOptions = {
   maxAge?: number
 }
 
+type ConfigResolver = (name: string) => {
+  pk: string
+  name: string
+  fks?: Record<string, string>
+} | undefined
+
 function identifier(obj: object): string {
   return String((obj as Record<string, unknown>).ID ?? (obj as Record<string, unknown>).Hash ?? (obj as Record<string, unknown>).ShortName ?? '')
 }
@@ -42,6 +75,8 @@ function serialize(obj: unknown, seen?: Set<string>): unknown {
   if (typeof obj !== 'object') return obj
   if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(v => serialize(v, seen))
+  if (typeof (obj as any)?.toHexString === 'function')
+    return (obj as any).toHexString()
 
   const id = identifier(obj)
   if (id && seen.has(id)) return id
@@ -69,15 +104,19 @@ function serialize(obj: unknown, seen?: Set<string>): unknown {
  * @param options.maxAge - Max log file age in milliseconds. @default 86400000
  */
 export class RollbackLogger {
-  private entries: ChangeLogEntry[] = []
+  private entryList: RollbackEntry[] = []
   private entrySize = 0
   private logDir: string
+  private realm: Realm
+  private resolveConfig: ConfigResolver
   enabled: boolean
 
-  constructor(options?: RollbackOptions) {
+  constructor(options: RollbackOptions | undefined, realm: Realm, resolveConfig: ConfigResolver) {
     const opts = { enabled: true, maxSize: 1_048_576, maxAge: 86_400_000, ...options }
     this.enabled = opts.enabled
     this.logDir = join(tmpdir(), 'osu-files-rollback')
+    this.realm = realm
+    this.resolveConfig = resolveConfig
 
     if (this.enabled) {
       if (!this.checkWritable())
@@ -89,6 +128,8 @@ export class RollbackLogger {
       this.purge(opts.maxSize, opts.maxAge)
     }
   }
+
+  get entries(): readonly RollbackEntry[] { return this.entryList }
 
   private checkWritable(): boolean {
     try {
@@ -134,50 +175,133 @@ export class RollbackLogger {
   log(entity: string, action: LogAction, primaryKey: unknown, before: unknown, after: unknown): void {
     if (!this.enabled) return
 
-    const entry: ChangeLogEntry = {
+    const entry = new RollbackEntry({
       timestamp: Date.now(),
       entity,
       action,
-      primaryKey: String(primaryKey),
+      primaryKey,
       before: before ? serialize(before) as Record<string, unknown> : null,
       after: after ? serialize(after) as Record<string, unknown> : null,
-    }
+    })
 
-    this.entries.push(entry)
+    this.entryList.push(entry)
     this.entrySize += JSON.stringify(entry).length
 
     try {
       const ts = new Date(entry.timestamp).toISOString().replace(/[:.]/g, '-')
-      const file = join(this.logDir, `${ts}_${entity}_${action}_${primaryKey}.json`)
+      const file = join(this.logDir, `${ts}_${entity}_${action}_${entry.primaryKey}.json`)
       writeFileSync(file, JSON.stringify(entry, null, 2), 'utf-8')
     } catch {}
 
     if (this.entrySize > 1_048_576)
-      this.entries.splice(0, Math.ceil(this.entries.length * 0.3))
+      this.entryList.splice(0, Math.ceil(this.entryList.length * 0.3))
   }
 
-  getEntries(): readonly ChangeLogEntry[] {
-    return this.entries
+  /** Rollback all entries in reverse order, then clear the log. */
+  rollbackAll(): void {
+    for (let i = this.entryList.length - 1; i >= 0; i--)
+      this.applyRevert(this.entryList[i])
+    this.entryList = []
+    this.entrySize = 0
   }
 
-  revertLast(): boolean {
-    if (this.entries.length === 0) return false
-    const entry = this.entries.pop()!
+  /** Rollback the most recent entry. Returns false if log is empty. */
+  rollbackLast(): boolean {
+    if (this.entryList.length === 0) return false
+    const entry = this.entryList.pop()!
+    this.entrySize -= JSON.stringify(entry).length
     this.applyRevert(entry)
     return true
   }
 
-  revert(): void {
-    for (let i = this.entries.length - 1; i >= 0; i--)
-      this.applyRevert(this.entries[i])
-    this.entries = []
+  /**
+   * Rollback all entries at or after the given timestamp, in reverse order.
+   * Older entries are kept.
+   * @returns Number of entries rolled back.
+   */
+  rollbackTo(timestamp: number): number {
+    const idx = this.entryList.findIndex(e => e.timestamp >= timestamp)
+    if (idx === -1) return 0
+
+    const toRevert = this.entryList.splice(idx)
+    this.entrySize -= toRevert.reduce((s, e) => s + JSON.stringify(e).length, 0)
+    for (let i = toRevert.length - 1; i >= 0; i--)
+      this.applyRevert(toRevert[i])
+    return toRevert.length
   }
 
-  private applyRevert(_entry: ChangeLogEntry): void {}
+  private applyRevert(entry: RollbackEntry): void {
+    const cfg = this.resolveConfig(entry.entity)
+    if (!cfg) return
 
+    this.realm.write(() => {
+      switch (entry.action) {
+        case LogAction.Create: {
+          const pk = this.entryPrimaryKey(entry)
+          const obj = (this.realm as any).objectForPrimaryKey(entry.entity, pk)
+          if (obj) this.realm.delete(obj)
+          break
+        }
+        case LogAction.Update: {
+          if (!entry.before) break
+          const pk = this.entryPrimaryKey(entry)
+          const obj = (this.realm as any).objectForPrimaryKey(entry.entity, pk)
+          if (!obj) break
+          for (const [key, value] of Object.entries(entry.before)) {
+            if (key === cfg.pk) continue
+            if (cfg.fks?.[key])
+              (obj as any)[key] = this.resolveFkRef(value, cfg.fks[key])
+            else
+              (obj as any)[key] = value
+          }
+          break
+        }
+        case LogAction.Delete: {
+          if (!entry.before) break
+          const data: Record<string, unknown> = { ...entry.before }
+          if (cfg.pk && typeof data[cfg.pk] === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(data[cfg.pk] as string))
+            data[cfg.pk] = new Realm.BSON.UUID(data[cfg.pk] as string)
+          for (const [field, fkType] of Object.entries(cfg.fks ?? {})) {
+            if (field in data)
+              data[field] = this.resolveFkRef(data[field], fkType)
+          }
+          this.realm.create(entry.entity, data as never)
+          break
+        }
+      }
+    })
+  }
+
+  private entryPrimaryKey(entry: RollbackEntry): string | number | Realm.BSON.UUID {
+    const pk = entry.primaryKey
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pk))
+      return new Realm.BSON.UUID(pk)
+    if (/^\d+$/.test(pk))
+      return parseInt(pk, 10)
+    return pk
+  }
+
+  private resolveFkRef(value: unknown, fkType: string): unknown {
+    if (value === null || value === undefined) return null
+      if (typeof value === 'string')
+      return (this.realm as any).objectForPrimaryKey(fkType, value) ?? null
+    if (typeof value === 'object') {
+      const fkCfg = this.resolveConfig(fkType)
+      if (!fkCfg) return value
+      const pkVal = (value as Record<string, unknown>)[fkCfg.pk]
+      if (pkVal !== undefined && pkVal !== null) {
+        if (typeof pkVal === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(pkVal))
+          return (this.realm as any).objectForPrimaryKey(fkType, new Realm.BSON.UUID(pkVal)) ?? null
+        return (this.realm as any).objectForPrimaryKey(fkType, pkVal) ?? null
+      }
+    }
+    return value
+  }
+
+  /** Disable logging and clear all stored entries without reverting. */
   disable(): void {
     this.enabled = false
-    this.entries = []
+    this.entryList = []
     this.entrySize = 0
   }
 }

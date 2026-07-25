@@ -3,7 +3,6 @@ import type { OsuFilesContext } from '../context.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from '../osz/types.js'
 import type { BeatmapSet, Beatmap } from '../schema/types.js'
-import { LogAction } from './logger.js'
 
 const MODE_TO_SHORTNAME: Record<number, string> = {
   0: 'osu', 1: 'taiko', 2: 'fruits', 3: 'mania',
@@ -46,7 +45,6 @@ export type ImportSetInput = {
  * importSet(ctx, { onlineID: 123, setHash: 'abc', status: 0, protected: false, files: [...], beatmaps: [...] })
  */
 export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapSetData {
-  const { logger } = ctx
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
@@ -54,9 +52,6 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   if (!existingSet && setHash) existingSet = ctx.sets.get.byHash(setHash) ?? null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
-  const before = existingSet
-    ? { onlineID: existingSet.OnlineID, hash: existingSet.Hash ?? '', beatmaps: existingSet.Beatmaps.length, files: existingSet.Files.length }
-    : null
 
   for (const rs of STANDARD_RULESETS) {
     if (!ctx.rulesets.get.byShortName(rs.ShortName)) {
@@ -166,9 +161,6 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
       TotalObjectCount: bm.hitObjects.length,
     })
   }
-
-  const after = { onlineID, setHash, beatmaps: beatmaps.length, files: files.length }
-  logger.log('BeatmapSet', existingSet ? LogAction.Update : LogAction.Create, String(setUUID), before, after)
 
   return {
     onlineID,

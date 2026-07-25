@@ -121,7 +121,7 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
       const pkVal = input[cfg.pk]
       if (pkVal === undefined || pkVal === null) return this.create(input)
       const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, pkVal as never)
-      if (existing) return this.update(String(pkVal), input)
+      if (existing) return this.update(pkVal, input)
       return this.create(input)
     },
   }
