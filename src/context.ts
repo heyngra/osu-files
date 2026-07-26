@@ -5,6 +5,7 @@ import type { ScoreModule } from './scores.js'
 import type { BeatmapSetModule } from './sets.js'
 import type { FileModule } from './files.js'
 import type { RulesetModule } from './rulesets.js'
+import type { RulesetSettingModule } from './rulesetsettings.js'
 import type { SkinModule } from './skins.js'
 import type { BeatmapMetadataModule } from './metadata.js'
 
@@ -19,11 +20,13 @@ export type OsuFilesContext = {
   logger: RollbackLogger
   filesFolderPath?: string
   checkHash?: boolean
+  queryCache?: boolean
   beatmaps: BeatmapModule
   scores: ScoreModule
   sets: BeatmapSetModule
   files: FileModule
   rulesets: RulesetModule
+  rulesetSettings: RulesetSettingModule
   skins: SkinModule
   metadata: BeatmapMetadataModule
 }

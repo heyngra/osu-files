@@ -1,18 +1,23 @@
-import type Realm from 'realm'
+import Realm from 'realm'
 import type { BeatmapCollection } from '../schema/types.js'
+import { EntityQuery } from './base.js'
 
-/**
- * Creates collection query helpers.
- * @param realm - The Realm instance.
- * @returns An object with methods to query beatmap collections by id, name, or contained beatmaps.
- * @example
- * const col = createCollectionGetModule(realm).byName('Favorites')
- */
-export function createCollectionGetModule(realm: Realm) {
-  return {
-    all: (): BeatmapCollection[] => [...realm.objects<BeatmapCollection>('BeatmapCollection')],
-    byId: (id: string): BeatmapCollection | undefined => realm.objectForPrimaryKey<BeatmapCollection>('BeatmapCollection', id) ?? undefined,
-    byName: (name: string): BeatmapCollection[] => [...realm.objects<BeatmapCollection>('BeatmapCollection').filtered('Name CONTAINS[c] $0', name)],
-    withBeatmap: (md5: string): BeatmapCollection[] => [...realm.objects<BeatmapCollection>('BeatmapCollection').filtered('ANY BeatmapMD5Hashes == $0', md5)],
-  }
+export class CollectionQuery extends EntityQuery<BeatmapCollection> {
+  constructor(realm: Realm) { super(realm, 'BeatmapCollection') }
+
+  /** @example db.collections.get.byId(uuid)[0] */
+  byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
+
+  /** @example db.collections.get.byNameEquals('Favorites')[0] */
+  byNameEquals(v: string)                { return this._str('Name', '==', v) }
+  /** @example db.collections.get.byNameContains('Fav')[0] */
+  byNameContains(v: string)              { return this._str('Name', 'CONTAINS[c]', v) }
+
+  /** @example db.collections.get.byLastModifiedBefore(someDate) */
+  byLastModifiedBefore(v: Date)          { return this._date('LastModified', '<', v) }
+  /** @example db.collections.get.byLastModifiedAfter(someDate) */
+  byLastModifiedAfter(v: Date)           { return this._date('LastModified', '>', v) }
+
+  /** @example db.collections.get.withBeatmap(md5) */
+  withBeatmap(v: string)                 { return this._fkAny('BeatmapMD5Hashes', v) }
 }

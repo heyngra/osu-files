@@ -10,7 +10,7 @@ const MODE_TO_SHORTNAME: Record<number, string> = {
 
 function resolveRulesetByMode(ctx: OsuFilesContext, mode: number) {
   const shortName = MODE_TO_SHORTNAME[mode]
-  return shortName ? ctx.rulesets.get.byShortName(shortName) ?? undefined : undefined
+  return shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] ?? undefined : undefined
 }
 
 const STANDARD_RULESETS = [
@@ -48,13 +48,13 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
-  if (onlineID > 0) existingSet = ctx.sets.get.byOnlineId(onlineID) ?? null
-  if (!existingSet && setHash) existingSet = ctx.sets.get.byHash(setHash) ?? null
+  if (onlineID > 0) existingSet = ctx.sets.get.byOnlineIdExact(onlineID)[0] ?? null
+  if (!existingSet && setHash) existingSet = ctx.sets.get.byHashEquals(setHash)[0] ?? null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
 
   for (const rs of STANDARD_RULESETS) {
-    if (!ctx.rulesets.get.byShortName(rs.ShortName)) {
+    if (!ctx.rulesets.get.byShortNameEquals(rs.ShortName)[0]) {
       ctx.rulesets.write.create(rs)
     }
   }
@@ -68,12 +68,12 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   }
 
   for (const f of files) {
-    if (!ctx.files.get.byHash(f.hash)) {
+    if (!ctx.files.get.byHashEquals(f.hash)[0]) {
       ctx.files.write.upsert({ Hash: f.hash })
     }
   }
 
-  const namedFileEntries = files.map(f => ({ File: ctx.files.get.byHash(f.hash)!, Filename: f.filename }))
+  const namedFileEntries = files.map(f => ({ File: ctx.files.get.byHashEquals(f.hash)[0]!, Filename: f.filename }))
 
   let beatmapSet: BeatmapSet
   if (!existingSet) {

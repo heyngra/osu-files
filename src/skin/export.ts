@@ -12,10 +12,10 @@ import { fileStoragePath } from '../util.js'
 export async function exportOskData(skin: Skin, filesFolderPath: string): Promise<Buffer> {
   const zip = new ZipFile()
 
-  for (const fileUsage of skin.Files as any[]) {
-    const hash: string = fileUsage.File?.Hash
-    const filename: string = fileUsage.Filename
-    if (!hash) continue
+  for (const fileUsage of skin.Files) {
+    const hash = fileUsage.File?.Hash
+    const filename = fileUsage.Filename
+    if (!hash || !filename) continue
 
     const storePath = fileStoragePath(filesFolderPath, hash)
     const content = readFileSync(storePath)

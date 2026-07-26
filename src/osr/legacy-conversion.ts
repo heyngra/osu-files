@@ -12,7 +12,7 @@
 // See: https://github.com/ppy/osu/blob/master/osu.Game.Rulesets.Osu/Objects/Slider.cs
 // See: https://github.com/ppy/osu-queue-score-statistics/blob/master/osu.Server.Queues.ScoreStatisticsProcessor/Helpers/BatchInserter.cs
 
-import type { OsuBeatmap, TimingPoint } from '../beatmap/types.js'
+import type { OsuBeatmap, TimingPoint, HitSlider, HitSpinner } from '../beatmap/types.js'
 import type { BeatmapDifficulty as LegacyBeatmapDifficulty } from '../schema/types.js'
 
 const MAX_COMBO_PORTION = 500000
@@ -245,10 +245,10 @@ export function computeLegacyScoreAttributes(
         combo++
         break
       case 'slider':
-        combo = simulateSlider(obj as any, attrs, sm, diff, combo, obj.time, beatmap.timingPoints, clockRate, beatmap.fileFormat)
+        combo = simulateSlider(obj as HitSlider, attrs, sm, diff, combo, obj.time, beatmap.timingPoints, clockRate, beatmap.fileFormat)
         break
       case 'spinner':
-        combo = simulateSpinner(obj as any, attrs, sm, combo, bonus)
+        combo = simulateSpinner(obj as HitSpinner, attrs, sm, combo, bonus)
         break
     }
   }

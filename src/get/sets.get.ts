@@ -1,20 +1,43 @@
 import Realm from 'realm'
 import type { BeatmapSet } from '../schema/types.js'
+import { EntityQuery } from './base.js'
 
-/**
- * Creates beatmap set query helpers.
- * @param realm - The Realm instance.
- * @returns An object with methods to query beatmap sets by id, hash, online id, or title/artist search.
- * @example
- * const recent = createBeatmapSetGetModule(realm).recent(25)
- */
-export function createBeatmapSetGetModule(realm: Realm) {
-  return {
-    all: (): BeatmapSet[] => [...realm.objects<BeatmapSet>('BeatmapSet')],
-    byId: (id: string | Realm.BSON.UUID): BeatmapSet | undefined => realm.objectForPrimaryKey<BeatmapSet>('BeatmapSet', typeof id === 'string' ? new Realm.BSON.UUID(id) : id) ?? undefined,
-    byOnlineId: (id: number): BeatmapSet | undefined => realm.objects<BeatmapSet>('BeatmapSet').filtered('OnlineID == $0', id)[0] ?? undefined,
-    byHash: (hash: string): BeatmapSet | undefined => realm.objects<BeatmapSet>('BeatmapSet').filtered('Hash == $0', hash)[0] ?? undefined,
-    recent: (limit = 50): BeatmapSet[] => [...realm.objects<BeatmapSet>('BeatmapSet').sorted('DateAdded', true).slice(0, limit)],
-    search: (query: string): BeatmapSet[] => [...realm.objects<BeatmapSet>('BeatmapSet').filtered('ANY Beatmaps.Metadata.Title CONTAINS[c] $0 OR ANY Beatmaps.Metadata.Artist CONTAINS[c] $0', query)],
-  }
+export class SetQuery extends EntityQuery<BeatmapSet> {
+  constructor(realm: Realm) { super(realm, 'BeatmapSet') }
+
+  /** @example db.sets.get.byId(uuid)[0] */
+  byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
+
+  /** @example db.sets.get.byOnlineIdExact(506483)[0] */
+  byOnlineIdExact(v: number)             { return this._num('OnlineID', '==', v) }
+  /** @example db.sets.get.byStatusExact(1) */
+  byStatusExact(v: number)               { return this._num('Status', '==', v) }
+
+  /** @example db.sets.get.byHashEquals(hash)[0] */
+  byHashEquals(v: string)                { return this._str('Hash', '==', v) }
+
+  /** @example db.sets.get.byDeletePending(true) */
+  byDeletePending(v: boolean)            { return this._bool('DeletePending', v) }
+  /** @example db.sets.get.byProtected(true) */
+  byProtected(v: boolean)                { return this._bool('Protected', v) }
+
+  /** @example db.sets.get.byDateAddedBefore(someDate) */
+  byDateAddedBefore(v: Date)             { return this._date('DateAdded', '<', v) }
+  /** @example db.sets.get.byDateAddedAfter(someDate) */
+  byDateAddedAfter(v: Date)              { return this._date('DateAdded', '>', v) }
+  /** @example db.sets.get.byDateSubmittedBefore(someDate) */
+  byDateSubmittedBefore(v: Date)         { return this._date('DateSubmitted', '<', v) }
+  /** @example db.sets.get.byDateSubmittedAfter(someDate) */
+  byDateSubmittedAfter(v: Date)          { return this._date('DateSubmitted', '>', v) }
+  /** @example db.sets.get.byDateRankedBefore(someDate) */
+  byDateRankedBefore(v: Date)            { return this._date('DateRanked', '<', v) }
+  /** @example db.sets.get.byDateRankedAfter(someDate) */
+  byDateRankedAfter(v: Date)             { return this._date('DateRanked', '>', v) }
+
+  /** @example db.sets.get.byBeatmapMd5(md5)[0] */
+  byBeatmapMd5(v: string)                { return this._fkAny('Beatmaps.MD5Hash', v) }
+  /** @example db.sets.get.byBeatmapOnlineId(506483)[0] */
+  byBeatmapOnlineId(v: number)           { return this._fkAny('Beatmaps.OnlineID', v) }
+  /** @example db.sets.get.withFile('audio.mp3')[0] */
+  withFile(v: string)                    { return this._fkAny('Files.Filename', v) }
 }

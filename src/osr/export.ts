@@ -51,7 +51,7 @@ const STAT_KEY_MAP: Record<string, StatKey> = {
 export function exportOsr(ctx: OsuFilesContext, scoreId: string, outputPath: string): void {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for export')
 
-  const score = ctx.scores.get.byId(scoreId) as any
+  const score = ctx.scores.get.byId(scoreId)[0]
   if (!score) throw new Error(`Score '${scoreId}' not found`)
 
   writeFileSync(outputPath, toBuffer(ctx, score))
@@ -69,7 +69,7 @@ export function exportOsr(ctx: OsuFilesContext, scoreId: string, outputPath: str
 export function toBuffer(ctx: OsuFilesContext, score: Score): Buffer {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required')
 
-  const replayFile = (score.Files as any[])?.find((f: any) => f.Filename === 'replay.osr' || f.Filename === 'replay')
+  const replayFile = score.Files?.find(f => f.Filename === 'replay.osr' || f.Filename === 'replay')
   if (!replayFile?.File?.Hash) throw new Error('Replay file not found for score')
 
   let rawReplayData: Buffer = readFileSync(fileStoragePath(ctx.filesFolderPath, replayFile.File.Hash))
@@ -143,7 +143,7 @@ export function toBuffer(ctx: OsuFilesContext, score: Score): Buffer {
 
   buffers.push(i64(BigInt(score.LegacyOnlineID ?? score.OnlineID ?? -1)))
 
-  const extraFile = (score.Files as any[])?.find((f: any) => f.Filename === 'replay.extra')
+  const extraFile = score.Files?.find(f => f.Filename === 'replay.extra')
   const extraBytes = extraFile?.File?.Hash
     ? readFileSync(fileStoragePath(ctx.filesFolderPath, extraFile.File.Hash))
     : parsedExtra

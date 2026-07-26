@@ -26,7 +26,7 @@ export async function exportOsz(
 ): Promise<void> {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for export')
 
-  const set = ctx.sets.get.byId(setID)
+  const set = ctx.sets.get.byId(setID)[0]
   if (!set) throw new Error(`BeatmapSet '${setID}' not found`)
 
   const zip = new ZipFile()
@@ -38,10 +38,10 @@ export async function exportOsz(
     }
   }
 
-  for (const fileUsage of set.Files as any[]) {
-    const hash: string = fileUsage.File?.Hash
-    const filename: string = fileUsage.Filename
-    if (!hash) continue
+  for (const fileUsage of set.Files) {
+    const hash = fileUsage.File?.Hash
+    const filename = fileUsage.Filename
+    if (!hash || !filename) continue
 
     const isOsu = filename.toLowerCase().endsWith('.osu')
     const override = isOsu ? beatmapOverrides.get(filename) ?? findOverrideByFilename(filename, beatmapOverrides) : undefined

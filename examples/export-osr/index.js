@@ -18,7 +18,7 @@ const rl = readline.createInterface({
   })
 
   try {
-    const recent = initialized.scores.get.recent(10)
+    const recent = initialized.scores.get.sortedBy('Date').slice(0, 10)
     if (recent.length === 0) {
       console.log('No scores found.')
       return
@@ -28,11 +28,11 @@ const rl = readline.createInterface({
     for (const score of recent) {
       const date = score.Date instanceof Date ? score.Date.toISOString().slice(0, 19) : String(score.Date)
       const beatmap = score.BeatmapHash ?? '?'
-      console.log(`  [${score.ID}] ${score.User?.Username ?? '?'} — ${date} — ${score.BeatmapInfo.OnlineID ?? '?'} (${beatmap.slice(0, 8)}...)`)
+      console.log(`  [${score.ID}] ${score.User?.Username ?? '?'} — ${date} — ${score.BeatmapInfo?.OnlineID ?? '?'} (${beatmap.slice(0, 8)}...)`)
     }
 
     const choice = (await rl.question('Enter the Score ID to export: ')).trim()
-    const score = initialized.scores.byId(choice)
+    const score = initialized.scores.get.byId(choice).first()
     if (!score) {
       console.log(`Score '${choice}' not found.`)
       return

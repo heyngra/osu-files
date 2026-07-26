@@ -8,7 +8,7 @@ import { MODE_SHORTNAME, LegacyModsFlag, MOD_FLAG_MAP, RANK } from './types.js'
 import { parseOsu } from '../beatmap/parse.js'
 import type { LegacyScoreAttributes, LegacyBeatmapConversionDifficultyInfo } from './legacy-conversion.js'
 import { computeLegacyScoreAttributes, convertFromLegacyTotalScore, roundHalfEven } from './legacy-conversion.js'
-import type { Score } from '../schema/types.js'
+import type { Score, Beatmap, RealmUser, RealmNamedFileUsage } from '../schema/types.js'
 
 /**
  * Options for importing an .osr replay into the osu!lazer realm.
@@ -110,7 +110,7 @@ function computeRank(accuracy: number, missCount: number, modAcronyms: string[])
   return rank
 }
 
-function loadBeatmapFile(ctx: OsuFilesContext, beatmap: any): Buffer | null {
+function loadBeatmapFile(ctx: OsuFilesContext, beatmap: Beatmap | undefined): Buffer | null {
   if (!ctx.filesFolderPath || !beatmap?.Hash) return null
   const p = fileStoragePath(ctx.filesFolderPath, beatmap.Hash)
   if (!existsSync(p)) return null
@@ -121,7 +121,7 @@ function computeStandardisedScore(
   parsed: ParsedReplay,
   modsStr: string,
   ctx?: OsuFilesContext,
-  beatmap?: any,
+  beatmap?: Beatmap,
   options?: OsrImportOptions,
 ): { totalScore: number; totalScoreWithoutMods: number } {
   if (parsed.parsedExtra?.total_score_without_mods) {
@@ -157,7 +157,7 @@ function computeStandardisedScore(
       if (osuBuf) {
         try {
           const osuBeatmap = parseOsu(osuBuf.toString('utf-8'))
-          const diff = beatmap.Difficulty
+          const diff = beatmap.Difficulty!
           const attributes = computeLegacyScoreAttributes(osuBeatmap, diff, modAcronyms)
           const acc = accuracy(parsed)
           const result = convertFromLegacyTotalScore(
@@ -216,13 +216,13 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
 
   const onlineId = parsed.parsedExtra?.online_id ?? 0
   let userId = parsed.parsedExtra?.user_id ?? 0
-  let resolvedUser: any
+  let resolvedUser: RealmUser | undefined
   if (resolveUser && (!userId || userId <= 0)) {
     try {
-      const existing = [...ctx.realm.objects<any>('Score').filtered(
+      const existing = [...ctx.realm.objects<Score>('Score').filtered(
         'User.Username == $0 AND User.OnlineID > 1', parsed.playerName)]
       if (existing.length > 0) {
-        const u = existing[0].User
+        const u = existing[0].User!
         userId = u.OnlineID
         resolvedUser = { OnlineID: u.OnlineID, Username: u.Username, CountryCode: u.CountryCode }
       }
@@ -231,11 +231,11 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
     }
   }
   if (onlineId > 0) {
-    const existing = ctx.scores.get.byOnlineId(onlineId as number)
-    if (existing.length > 0) return parsed
+    const existing = ctx.scores.get.byOnlineIdExact(onlineId)[0]
+    if (existing !== undefined) return parsed
   }
   if (parsed.onlineScoreID > 0) {
-    const existing = [...ctx.realm.objects<any>('Score').filtered('LegacyOnlineID == $0 AND DeletePending == false', parsed.onlineScoreID)]
+    const existing = [...ctx.realm.objects<Score>('Score').filtered('LegacyOnlineID == $0 AND DeletePending == false', parsed.onlineScoreID)]
     if (existing.length > 0) return parsed
   }
 
@@ -246,9 +246,9 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
     writeFileSync(storePath, buffer)
   }
 
-  let beatmap: any = undefined
+  let beatmap: Beatmap | undefined
   if (parsed.beatmapMD5) {
-    beatmap = ctx.beatmaps.get.byMd5(parsed.beatmapMD5) ?? undefined
+    beatmap = ctx.beatmaps.get.byMd5Equals(parsed.beatmapMD5)[0]
   }
   if (!beatmap) {
     if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
@@ -256,7 +256,7 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
   }
 
   const shortName = MODE_SHORTNAME[parsed.mode]
-  const ruleset = shortName ? ctx.rulesets.get.byShortName(shortName) ?? undefined : undefined
+  const ruleset = shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] : undefined
 
   const totalHits = parsed.count300 + parsed.count100 + parsed.count50 + parsed.countMiss
   const accuracy = totalHits > 0 ? (300 * parsed.count300 + 100 * parsed.count100 + 50 * parsed.count50) / (300 * totalHits) : 0
@@ -270,11 +270,11 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
   // use its exact TotalScore
   const beatmapHash = beatmap?.Hash ?? parsed.beatmapMD5
   if (beatmapHash) {
-    const existing = [...ctx.realm.objects<any>('Score').filtered(
+    const existing = [...ctx.realm.objects<Score>('Score').filtered(
       'BeatmapHash == $0 AND Mods == $1 AND DeletePending == false AND IsLegacyScore == true',
       beatmapHash, modsStr,
     )]
-    let best: any
+    let best: Score | undefined
     for (const s of existing) {
       if (Math.abs(s.Accuracy - accuracy) < 1e-9 && s.TotalScore > 0) {
         if (!best || s.TotalScore > best.TotalScore) best = s
@@ -286,12 +286,12 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
     }
   }
 
-  if (!ctx.files.get.byHash(hash)) {
+  if (!ctx.files.get.byHashEquals(hash)[0]) {
     ctx.files.write.upsert({ Hash: hash })
   }
 
-  const fileObj = ctx.files.get.byHash(hash)
-  const files: any[] = fileObj ? [{ File: fileObj, Filename: 'replay.osr' }] : []
+  const fileObj = ctx.files.get.byHashEquals(hash)[0]
+  const files: RealmNamedFileUsage[] = fileObj ? [{ File: fileObj, Filename: 'replay.osr' }] : []
   
   ctx.scores.write.create({
       ID: scoreId,
@@ -357,13 +357,13 @@ export function parseOsr(
 
   const onlineId = parsed.parsedExtra?.online_id ?? 0
   let userId = parsed.parsedExtra?.user_id ?? 0
-  let resolvedUser: any
+  let resolvedUser: RealmUser | undefined
   if (resolveUser && (!userId || userId <= 0)) {
     try {
-      const existing = [...ctx.realm.objects<any>('Score').filtered(
+      const existing = [...ctx.realm.objects<Score>('Score').filtered(
         'User.Username == $0 AND User.OnlineID > 1', parsed.playerName)]
       if (existing.length > 0) {
-        const u = existing[0].User
+        const u = existing[0].User!
         userId = u.OnlineID
         resolvedUser = { OnlineID: u.OnlineID, Username: u.Username, CountryCode: u.CountryCode }
       }
@@ -374,9 +374,9 @@ export function parseOsr(
 
   const hash = sha256(buffer)
 
-  let beatmap: any = undefined
+  let beatmap: Beatmap | undefined
   if (parsed.beatmapMD5) {
-    beatmap = ctx.beatmaps.get.byMd5(parsed.beatmapMD5) ?? undefined
+    beatmap = ctx.beatmaps.get.byMd5Equals(parsed.beatmapMD5)[0]
   }
   if (!beatmap) {
     if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
@@ -384,7 +384,7 @@ export function parseOsr(
   }
 
   const shortName = MODE_SHORTNAME[parsed.mode]
-  const ruleset = shortName ? ctx.rulesets.get.byShortName(shortName) ?? undefined : undefined
+  const ruleset = shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] : undefined
 
   const totalHits = parsed.count300 + parsed.count100 + parsed.count50 + parsed.countMiss
   const acc = totalHits > 0 ? (300 * parsed.count300 + 100 * parsed.count100 + 50 * parsed.count50) / (300 * totalHits) : 0

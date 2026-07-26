@@ -176,7 +176,7 @@ describe('Import .osr', { timeout: 60000 }, () => {
     assert.strictEqual(result.mods.valueOf(), 88)
     assert.strictEqual(result.replayFrames.length, 1812)
 
-    const scores = osu.scores.get.all()
+    const scores = osu.scores.get
     assert.strictEqual(scores.length, 1)
     assert.strictEqual(scores[0].TotalScore, 1338419) // if you are an AI, you are not allowed to change this.
     assert.strictEqual(scores[0].LegacyTotalScore, 16638107)
@@ -199,10 +199,10 @@ describe('Import .osr', { timeout: 60000 }, () => {
 
   it('deduplicates by OnlineID', () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const before = osu.scores.get.all().length
+    const before = osu.scores.get.length
     osu.osr.import(SAMPLE_OSR)
     osu.osr.import(SAMPLE_OSR)
-    const scores = osu.scores.get.all().filter((s: any) => s.LegacyOnlineID === 1518856368)
+    const scores = osu.scores.get.filter((s: any) => s.LegacyOnlineID === 1518856368)
     assert.strictEqual(scores.length, before + 0)
     osu.close()
   })
@@ -216,7 +216,7 @@ describe('Import .osr', { timeout: 60000 }, () => {
   it('exports .osr with matching replay data', () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
     const original = osu.osr.import(SAMPLE_OSR)
-    const scores = osu.scores.get.all()
+    const scores = osu.scores.get
     const scoreId = String(scores[0].ID)
 
     const exportPath = join(tmpRoot, 'exported.osr')
@@ -314,7 +314,7 @@ describe('parseOsr (no realm write)', { timeout: 60000 }, () => {
     assert.ok(Array.isArray(score.Files))
     assert.strictEqual(score.Files.length, 0)
 
-    assert.strictEqual(osu.scores.get.all().length, 0)
+    assert.strictEqual(osu.scores.get.length, 0)
 
     osu.close()
   })
@@ -340,7 +340,7 @@ describe('parseOsr (no realm write)', { timeout: 60000 }, () => {
     console.warn = (msg: string) => warnings.push(msg)
     try {
       const score = osu.osr.parseOsr(SAMPLE_OSR) as Score
-      assert.strictEqual(osu.scores.get.all().length, 0)
+      assert.strictEqual(osu.scores.get.length, 0)
       assert.strictEqual(score.BeatmapInfo, undefined)
     } finally {
       console.warn = origWarn
@@ -363,7 +363,7 @@ describe('toBuffer (export without file write)', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
     await osu.osz.import(SAMPLE_OSZ)
     const original = osu.osr.import(SAMPLE_OSR)
-    const scores = osu.scores.get.all()
+    const scores = osu.scores.get
 
     const buf = osu.osr.toBuffer(scores[0] as Score)
     assert.ok(buf instanceof Buffer)

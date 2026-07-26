@@ -21,7 +21,7 @@ const rl = readline.createInterface({
   })
 
   try {
-    const [newest] = initialized.sets.recent(1)
+    const newest = initialized.sets.get.sortedBy('DateAdded')[0]
     if (!newest) {
       console.log('No beatmap sets found.')
       return

@@ -18,7 +18,7 @@ const rl = readline.createInterface({
   })
 
   try {
-    const skins = initialized.skins.usable()
+    const skins = initialized.skins.get.usable()
     if (skins.length === 0) {
       console.log('No usable skins found.')
       return

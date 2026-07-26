@@ -1,7 +1,7 @@
 import { rmSync } from 'fs'
 import type { File } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
-import { createFileGetModule } from './get/files.get.js'
+import { FileQuery } from './get/files.get.js'
 import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { fileStoragePath } from './util.js'
@@ -16,20 +16,14 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): void {
 
   const referenced = new Set<string>()
 
-  for (const s of ctx.sets.get.all()) {
-    if (s.DeletePending) continue
-    for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
-  }
-  for (const s of ctx.skins.get.all()) {
-    if (s.DeletePending) continue
-    for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
-  }
-  for (const s of ctx.scores.get.all()) {
-    if (s.DeletePending) continue
-    for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
+  for (const src of [ctx.sets.get, ctx.skins.get, ctx.scores.get]) {
+    for (const s of src) {
+      if (s.DeletePending) continue
+      for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
+    }
   }
 
-  const orphaned = ctx.files.get.all().filter(f => f.Hash && !referenced.has(f.Hash))
+  const orphaned = ctx.files.get.filter(f => f.Hash && !referenced.has(f.Hash))
   if (orphaned.length === 0) return
 
   ctx.realm.write(() => {
@@ -43,10 +37,12 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): void {
 /**
  * Creates the file sub-module with query, write, and orphan cleanup operations.
  * @example
- * const f = db.files.get.byHash(hash)
+ * const f = db.files.get.byHashEquals(hash)[0]
  */
 export function createFileModule(ctx: OsuFilesContext) {
-  const get = createFileGetModule(ctx.realm)
+  const fileQuery = new FileQuery(ctx.realm)
+  fileQuery.enableCache = ctx.queryCache ?? true
+  const get = fileQuery.proxify()
   return {
     get,
     write: createCrud<File>(ctx, getConfig('File')!),

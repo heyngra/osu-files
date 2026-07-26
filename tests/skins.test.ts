@@ -147,7 +147,7 @@ describe('Import/Export .osk', { timeout: 60000 }, () => {
     assert.ok(result.hash)
     assert.ok(result.id)
 
-    const skins = osu.skins.get.all()
+    const skins = osu.skins.get
     assert.strictEqual(skins.length, 1)
     assert.strictEqual(skins[0].Protected, false)
     assert.strictEqual(skins[0].DeletePending, false)
@@ -157,7 +157,7 @@ describe('Import/Export .osk', { timeout: 60000 }, () => {
 
   it('exports .osk with identical file hashes', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const skins = osu.skins.get.all()
+    const skins = osu.skins.get
     assert.strictEqual(skins.length, 1)
 
     const exportPath = join(tmpRoot, 'exported.osk')
@@ -197,7 +197,7 @@ describe('Import/Export .osk', { timeout: 60000 }, () => {
 
   it('duplicates a skin with (modified) suffix', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const original = osu.skins.get.all()[0]
+    const original = osu.skins.get[0]
     const dup = osu.skins.duplicate(String(original.ID))
 
     assert.ok(dup.Name!.includes('(modified)'))
@@ -205,13 +205,13 @@ describe('Import/Export .osk', { timeout: 60000 }, () => {
     assert.strictEqual(dup.DeletePending, false)
     assert.strictEqual(dup.Creator, original.Creator)
 
-    assert.strictEqual(osu.skins.get.all().length, 2)
+    assert.strictEqual(osu.skins.get.length, 2)
     osu.close()
   })
 
   it('duplicate auto-increments on name collision', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const original = osu.skins.get.all()[0]
+    const original = osu.skins.get[0]
 
     const baseName = original.Name!
 
@@ -226,7 +226,7 @@ describe('Import/Export .osk', { timeout: 60000 }, () => {
 
   it('delete / undelete / usable chain', async () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    const skin = osu.skins.get.all()[0]
+    const skin = osu.skins.get[0]
     assert.strictEqual(skin.DeletePending, false)
     assert.strictEqual(osu.skins.get.usable().length, 4)
 
@@ -264,15 +264,15 @@ describe('Import/Export .osk', { timeout: 60000 }, () => {
     const osu = init(join(queryRoot, 'client.realm'), { schemaVersion: 51, filesFolderPath: join(queryRoot, 'files') })
     const result = await osu.osk.import(SAMPLE_OSK)
 
-    const foundHash = osu.skins.get.byHash(result.hash)
+    const foundHash = osu.skins.get.byHashEquals(result.hash)
     assert.strictEqual(foundHash.length, 1)
 
-    const foundCreator = osu.skins.get.byCreator('cyperdark')
+    const foundCreator = osu.skins.get.byCreatorContains('cyperdark')
     assert.strictEqual(foundCreator.length, 1)
-    assert.strictEqual(osu.skins.get.byCreator('CYPERDARK').length, 1)
+    assert.strictEqual(osu.skins.get.byCreatorContains('CYPERDARK').length, 1)
 
-    const skin = osu.skins.get.all()[0]
-    const foundName = osu.skins.get.byName(skin.Name!.substring(0, 10))
+    const skin = osu.skins.get[0]
+    const foundName = osu.skins.get.byNameContains(skin.Name!.substring(0, 10))
     assert.strictEqual(foundName.length, 1)
 
     assert.strictEqual(osu.skins.get.withFile('cursor.png').length, 1)

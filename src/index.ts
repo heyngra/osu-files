@@ -7,6 +7,7 @@ import type { ScoreModule } from './scores.js'
 import type { BeatmapSetModule } from './sets.js'
 import type { BeatmapCollectionModule } from './collections.js'
 import type { RulesetModule } from './rulesets.js'
+import type { RulesetSettingModule } from './rulesetsettings.js'
 import type { SkinModule } from './skins.js'
 import type { FileModule } from './files.js'
 import type { KeyBindingModule } from './keybindings.js'
@@ -17,6 +18,7 @@ import { createScoreModule } from './scores.js'
 import { createBeatmapSetModule } from './sets.js'
 import { createCollectionModule } from './collections.js'
 import { createRulesetModule } from './rulesets.js'
+import { createRulesetSettingModule } from './rulesetsettings.js'
 import { createSkinModule } from './skins.js'
 import { createFileModule } from './files.js'
 import { createKeyBindingModule } from './keybindings.js'
@@ -77,6 +79,8 @@ export type OsuFilesAPI = {
   collections: BeatmapCollectionModule
   /** Ruleset module for querying rulesets (osu!, taiko, fruits, mania). */
   rulesets: RulesetModule
+  /** Ruleset setting module for querying ruleset settings. */
+  rulesetSettings: RulesetSettingModule
   /** Skin module for querying, writing, importing, exporting, and managing skins. */
   skins: SkinModule
   /** File module for querying files and cleaning up orphans. */
@@ -107,7 +111,7 @@ export type OsuFilesAPI = {
     /** Parses an .osr replay file into a Score object without writing to realm. */
     parseOsr(filePath: string, options?: OsrImportOptions): Score
     /** Serialises a Score into an .osr replay buffer without writing to disk. */
-    toBuffer(score: any): Buffer
+    toBuffer(score: Score): Buffer
     /** Computes an MD5 hash for matching lazer replays by username and timestamp. */
     computeReplayMD5(username: string, timestamp: Date): string
   }
@@ -147,6 +151,8 @@ export type InitOptions = {
   filesFolderPath?: string
   /** Every write checks if hash is present in the files folder. */
   checkHash?: boolean
+  /** Cache query results in memory across repeated accesses on the same query object. @default true */
+  queryCache?: boolean
 }
 /**
  * Opens an osu!lazer client.realm database.
@@ -156,11 +162,11 @@ export type InitOptions = {
  * @returns The osu-files API object with close(), rollback, and all sub-modules.
  * @example
  * const db = init('./client.realm', { filesFolderPath: './files' })
- * const sets = db.sets.get.all()
+ * const sets = db.sets.get
  * db.close()
  */
 export function init(path: string, options?: InitOptions): OsuFilesAPI {
-  const { schemaVersion = 51, readOnly = false, rollback: rb, filesFolderPath, checkHash } = options ?? {}
+  const { schemaVersion = 51, readOnly = false, rollback: rb, filesFolderPath, checkHash, queryCache = true } = options ?? {}
   const rollbackOpts: RollbackOptions = rb === undefined
     ? { enabled: !readOnly }
     : (rb === false ? { enabled: false } : { enabled: !readOnly, ...rb })
@@ -174,12 +180,13 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
 
   const logger = new RollbackLogger(rollbackOpts, realm, getConfig)
 
-  const ctx = { realm, logger, filesFolderPath, checkHash } as OsuFilesContext
+  const ctx = { realm, logger, filesFolderPath, checkHash, queryCache } as OsuFilesContext
 
   const beatmaps = createBeatmapModule(ctx)
   const scores = createScoreModule(ctx)
   const files = createFileModule(ctx)
   const rulesets = createRulesetModule(ctx)
+  const rulesetSettings = createRulesetSettingModule(ctx)
   const skins = createSkinModule(ctx)
   const sets = createBeatmapSetModule(ctx)
   const metadata = createBeatmapMetadataModule(ctx)
@@ -187,6 +194,7 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
   ctx.scores = scores
   ctx.files = files
   ctx.rulesets = rulesets
+  ctx.rulesetSettings = rulesetSettings
   ctx.skins = skins
   ctx.sets = sets
   ctx.metadata = metadata
@@ -214,6 +222,8 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
     collections: createCollectionModule(ctx),
     /** Ruleset module for querying rulesets (osu!, taiko, fruits, mania). */
     rulesets,
+    /** Ruleset setting module for querying ruleset settings. */
+    rulesetSettings,
     /** Skin module for querying, writing, importing, exporting, and managing skins. */
     skins,
     /** File module for querying files and cleaning up orphans. */

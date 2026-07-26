@@ -1,17 +1,25 @@
-import type Realm from 'realm'
+import Realm from 'realm'
 import type { ModPreset } from '../schema/types.js'
+import { EntityQuery } from './base.js'
 
-/**
- * Creates mod preset query helpers.
- * @param realm - The Realm instance.
- * @returns An object with methods to query mod presets by id or ruleset.
- * @example
- * const presets = createModPresetGetModule(realm).byRuleset('osu')
- */
-export function createModPresetGetModule(realm: Realm) {
-  return {
-    all: (): ModPreset[] => [...realm.objects<ModPreset>('ModPreset')],
-    byId: (id: string): ModPreset | undefined => realm.objectForPrimaryKey<ModPreset>('ModPreset', id) ?? undefined,
-    byRuleset: (shortName: string): ModPreset[] => [...realm.objects<ModPreset>('ModPreset').filtered('Ruleset.ShortName == $0', shortName)],
-  }
+export class ModPresetQuery extends EntityQuery<ModPreset> {
+  constructor(realm: Realm) { super(realm, 'ModPreset') }
+
+  /** @example db.modPresets.get.byId(uuid)[0] */
+  byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
+
+  /** @example db.modPresets.get.byNameEquals('HD') */
+  byNameEquals(v: string)                { return this._str('Name', '==', v) }
+  /** @example db.modPresets.get.byNameContains('DT') */
+  byNameContains(v: string)              { return this._str('Name', 'CONTAINS[c]', v) }
+  /** @example db.modPresets.get.byDescriptionContains('hidden') */
+  byDescriptionContains(v: string)       { return this._str('Description', 'CONTAINS[c]', v) }
+  /** @example db.modPresets.get.byModsContains('HD') */
+  byModsContains(v: string)              { return this._str('Mods', 'CONTAINS[c]', v) }
+
+  /** @example db.modPresets.get.byDeletePending(true) */
+  byDeletePending(v: boolean)            { return this._bool('DeletePending', v) }
+
+  /** @example db.modPresets.get.byRulesetShortNameEquals('osu') */
+  byRulesetShortNameEquals(v: string)     { return this._fkEq('Ruleset.ShortName', v) }
 }

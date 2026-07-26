@@ -1,8 +1,8 @@
 import Realm from 'realm'
 import type { Skin, RealmFile, RealmNamedFileUsage } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
-import { createSkinGetModule } from './get/skins.get.js'
-import { createFileGetModule } from './get/files.get.js'
+import { SkinQuery } from './get/skins.get.js'
+import { FileQuery } from './get/files.get.js'
 import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { importOskEntries, type ImportedSkinData } from './skin/import.js'
@@ -28,16 +28,20 @@ function getNextBestSkinName(existingNames: Iterable<string>, desiredName: strin
 /**
  * Creates the skin sub-module with query, write, import/export, and lifecycle operations.
  * @example
- * const skin = db.skins.get.byId(id)
+ * const skin = db.skins.get.byNameContains('WhiteCat')[0]
  */
 export function createSkinModule(ctx: OsuFilesContext) {
-  const get = createSkinGetModule(ctx.realm)
+  const skinQuery = new SkinQuery(ctx.realm)
+  skinQuery.enableCache = ctx.queryCache ?? true
+  const get = skinQuery.proxify()
   const write = createCrud<Skin>(ctx, getConfig('Skin')!)
-  const filesGet = createFileGetModule(ctx.realm)
+  const fileQuery = new FileQuery(ctx.realm)
+  fileQuery.enableCache = ctx.queryCache ?? true
+  const filesGet = fileQuery.proxify()
   const filesWrite = createCrud<RealmFile>(ctx, getConfig('File')!)
 
   return {
-    get,
+    get: get,
     write,
 
     importOsk: async (filePath: string): Promise<ImportedSkinData> => {
@@ -47,9 +51,9 @@ export function createSkinModule(ctx: OsuFilesContext) {
 
       const namedFiles: RealmNamedFileUsage[] = []
       for (const entry of data.entries) {
-        let file = filesGet.byHash(entry.hash)
+        let file = filesGet.byHashEquals(entry.hash)[0]
         if (!file) file = filesWrite.create({ Hash: entry.hash })
-        namedFiles.push({ File: file, Filename: entry.filename } as RealmNamedFileUsage)
+        namedFiles.push({ File: file, Filename: entry.filename })
       }
 
       write.create({
@@ -73,13 +77,13 @@ export function createSkinModule(ctx: OsuFilesContext) {
     },
 
     exportOsk: async (skinId: string): Promise<Buffer> => {
-      const skin = get.byId(skinId)
+      const skin = get.byId(skinId)[0]
       if (!skin) throw new Error(`Skin '${skinId}' not found`)
       return exportOskData(skin, ctx.filesFolderPath!)
     },
 
     delete: (skinId: string): void => {
-      const skin = get.byId(skinId)
+      const skin = get.byId(skinId)[0]
       if (!skin) throw new Error(`Skin '${skinId}' not found`)
       if (skin.Protected) throw new Error(`Cannot delete protected skin '${skin.Name}'`)
       write.update(new Realm.BSON.UUID(skinId), { DeletePending: true })
@@ -87,25 +91,25 @@ export function createSkinModule(ctx: OsuFilesContext) {
     },
 
     undelete: (skinId: string): void => {
-      const skin = get.byId(skinId)
+      const skin = get.byId(skinId)[0]
       if (!skin) throw new Error(`Skin '${skinId}' not found`)
       write.update(new Realm.BSON.UUID(skinId), { DeletePending: false })
     },
 
     duplicate: (skinId: string): Skin => {
-      const source = get.byId(skinId)
+      const source = get.byId(skinId)[0]
       if (!source) throw new Error(`Skin '${skinId}' not found`)
 
-      const existingNames = [...get.usable()
+      const existingNames = get.usable()
         .map(s => s.Name)
-        .filter((n): n is string => !!n)]
+        .filter((n): n is string => !!n)
 
       const newName = getNextBestSkinName(existingNames, `${source.Name || 'Skin'} (modified)`)
 
       const namedFiles: RealmNamedFileUsage[] = []
-      for (const f of source.Files as any[]) {
+      for (const f of source.Files) {
         const file: RealmFile | undefined = f.File
-        if (file) namedFiles.push({ File: file, Filename: f.Filename } as RealmNamedFileUsage)
+        if (file) namedFiles.push({ File: file, Filename: f.Filename })
       }
 
       return write.create({

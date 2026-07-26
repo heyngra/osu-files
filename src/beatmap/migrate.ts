@@ -14,7 +14,7 @@ import { fileStoragePath } from '../util.js'
 export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string): OsuBeatmap | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const beatmap = ctx.beatmaps.get.byId(beatmapId)
+  const beatmap = ctx.beatmaps.get.byId(beatmapId)[0]
   if (!beatmap) return undefined
 
   const hash = beatmap.Hash ?? ''
@@ -45,7 +45,7 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
 export function realmSetToBeatmapSetData(ctx: OsuFilesContext, setId: string): BeatmapSetData | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const set = ctx.sets.get.byId(setId)
+  const set = ctx.sets.get.byId(setId)[0]
   if (!set) return undefined
 
   const files: BeatmapSetFile[] = []
