@@ -20,4 +20,9 @@ export class CollectionQuery extends EntityQuery<BeatmapCollection> {
 
   /** @example db.collections.get.withBeatmap(md5) */
   withBeatmap(v: string)                 { return this._fkAny('BeatmapMD5Hashes', v) }
+
+  /** @example db.collections.get.byNameSorted() */
+  byNameSorted(ascending = true)         { return this.sortedBy('Name', ascending) }
+  /** @example db.collections.get.byLastModifiedDesc() */
+  byLastModifiedDesc()                   { return this.sortedBy('LastModified', false) }
 }

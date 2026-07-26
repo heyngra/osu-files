@@ -25,11 +25,12 @@ export abstract class EntityQuery<T> {
    * @example db.scores.get.sortedBy('Date').slice(0, 10)
    */
   proxify(): this & T[] {
-    return new Proxy(this, {
+    const q = this
+    return new Proxy(q, {
       get(_, p: string | symbol) {
-        if (typeof p !== 'string' || p in this || p === 'then')
-          return (this as any)[p]
-        const arr = (this as any)._eval()
+        if (typeof p !== 'string' || p in q || p === 'then')
+          return (q as any)[p]
+        const arr = q._eval()
         const val = (arr as any)[p]
         return typeof val === 'function'
           ? (...args: unknown[]) => (val as Function).apply(arr, args)

@@ -5,9 +5,7 @@ export type { BeatmapMetadata as default }
 
 export const BeatmapMetadataSchema = {
   name: 'BeatmapMetadata',
-  primaryKey: 'ID',
   properties: {
-    ID: 'uuid',
     Title: 'string?',
     TitleUnicode: 'string?',
     Artist: 'string?',

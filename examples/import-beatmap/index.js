@@ -20,20 +20,24 @@ const rl = readline.createInterface({
     checkHash: true,
   })
 
-  const allFiles = await readdir(beatmapDir)
-  const oszFiles = allFiles.filter(f => extname(f).toLowerCase() === '.osz')
-  console.log(allFiles);
-  for (const file of oszFiles) {
-    const fullPath = join(beatmapDir, file)
-    console.log(`Importing ${file}...`)
-    try {
-      const result = await initialized.osz.import(fullPath)
-      console.log(`  OK: setID=${result.onlineID} beatmaps=${result.beatmaps.length}`)
-      await rm(fullPath)
-    } catch (err) {
-      console.error(`  FAIL: ${err instanceof Error ? err.message : err}`)
+  try {
+    const allFiles = await readdir(beatmapDir)
+    const oszFiles = allFiles.filter(f => extname(f).toLowerCase() === '.osz')
+    console.log(allFiles);
+    for (const file of oszFiles) {
+      const fullPath = join(beatmapDir, file)
+      console.log(`Importing ${file}...`)
+      try {
+        const result = await initialized.osz.import(fullPath)
+        console.log(`  OK: setID=${result.onlineID} beatmaps=${result.beatmaps.length}`)
+        await rm(fullPath)
+      } catch (err) {
+        console.error(`  FAIL: ${err instanceof Error ? err.message : err}`)
+      }
     }
+  } finally {
+    rl.close()
+    initialized.close()
+    process.exit(0)
   }
-
-  rl.close();
 })();

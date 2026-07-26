@@ -82,7 +82,6 @@ export type BeatmapDifficulty = {
 
 /** Beatmap metadata (title, artist, tags, etc.). */
 export type BeatmapMetadata = {
-  ID: BSON.UUID
   /** @example 'Make A Move' */
   Title?: string
   /** @example 'Make A Move' */

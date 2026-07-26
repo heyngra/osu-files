@@ -26,5 +26,6 @@ const rl = readline.createInterface({
   } finally {
     initialized.close()
     rl.close()
+    process.exit(0)
   }
 })()

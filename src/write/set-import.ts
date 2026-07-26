@@ -61,9 +61,8 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
 
   if (existingSet) {
     for (const b of [...existingSet.Beatmaps]) {
-      const metadataId = b.Metadata?.ID
+      if (b.Metadata) ctx.realm.write(() => ctx.realm.delete(b.Metadata!))
       ctx.beatmaps.write.delete(b.ID)
-      if (metadataId) ctx.metadata.write.delete(metadataId)
     }
   }
 
@@ -101,8 +100,7 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
     const meta = bm.metadata
     const diff = bm.difficulty
 
-    const metadataObj = ctx.metadata.write.create({
-      ID: new Realm.BSON.UUID(),
+    const metadataObj = ctx.realm.create('BeatmapMetadata', {
       Title: meta.title || '',
       TitleUnicode: meta.titleUnicode || '',
       Artist: meta.artist || '',

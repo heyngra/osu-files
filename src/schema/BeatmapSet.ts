@@ -10,7 +10,7 @@ export const BeatmapSetSchema = {
     ID: 'uuid',
     OnlineID: { type: 'int', indexed: true },
     DateAdded: 'date',
-    Beatmaps: { type: 'linkingObjects', objectType: 'Beatmap', property: 'BeatmapSet' },
+    Beatmaps: 'Beatmap[]',
     Files: 'RealmNamedFileUsage[]',
     Status: 'int',
     DeletePending: 'bool',
