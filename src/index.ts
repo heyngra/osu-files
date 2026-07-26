@@ -49,6 +49,11 @@ export type { ImportedSkinData } from './skin/import.js'
 export { parseSkinIni } from './skin/skin-ini.js'
 export type { SkinIni, SkinIniGeneral, SkinIniColours, SkinIniFonts, SkinIniCatchTheBeat, SkinIniMania, SkinIniColour } from './skin/skin-ini.js'
 
+export type { KeyBindingDef } from './keybindings/types.js'
+export { GlobalAction, OsuAction, TaikoAction, CatchAction, ManiaAction, RulesetAction, RulesetName, RulesetOnlineID } from './keybindings/types.js'
+export { GLOBAL_DEFAULTS, OSU_DEFAULTS, TAIKO_DEFAULTS, CATCH_DEFAULTS, getManiaDefaults } from './keybindings/defaults.js'
+export { InputKey } from './keybindings/keys.js'
+
 export type { BeatmapSetData, BeatmapSetFile } from './osz/types.js'
 export type {
   OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,

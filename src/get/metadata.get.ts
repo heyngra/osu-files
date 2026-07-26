@@ -5,9 +5,6 @@ import { EntityQuery } from './base.js'
 export class MetadataQuery extends EntityQuery<BeatmapMetadata> {
   constructor(realm: Realm) { super(realm, 'BeatmapMetadata') }
 
-  /** @example db.metadata.get.byId(uuid)[0] */
-  byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
-
   /** @example db.metadata.get.byTitleEquals('Make A Move') */
   byTitleEquals(v: string)                { return this._str('Title', '==', v) }
   /** @example db.metadata.get.byTitleContains('Move') */

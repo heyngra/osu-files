@@ -95,27 +95,32 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
     beatmapSet = existingSet
   }
 
+  const createdBeatmaps: Beatmap[] = []
+
   for (const entry of beatmaps) {
     const bm = entry.osuBeatmap
     const meta = bm.metadata
     const diff = bm.difficulty
 
-    const metadataObj = ctx.realm.create('BeatmapMetadata', {
-      Title: meta.title || '',
-      TitleUnicode: meta.titleUnicode || '',
-      Artist: meta.artist || '',
-      ArtistUnicode: meta.artistUnicode || '',
-      Author: { OnlineID: 1, Username: meta.creator || '', CountryCode: 'Unknown' },
-      Source: meta.source || '',
-      Tags: meta.tags?.join(' ') || '',
-      PreviewTime: bm.general.previewTime ?? -1,
-      AudioFile: bm.general.audioFilename || '',
-      BackgroundFile: bm.events.find(e => e.type === 'background')?.filename ?? '',
-      UserTags: [],
-    })
-
     const ruleset = resolveRulesetByMode(ctx, bm.general.mode)
     if (!ruleset) continue
+
+    let metadataObj: any
+    ctx.realm.write(() => {
+      metadataObj = ctx.realm.create('BeatmapMetadata', {
+        Title: meta.title || '',
+        TitleUnicode: meta.titleUnicode || '',
+        Artist: meta.artist || '',
+        ArtistUnicode: meta.artistUnicode || '',
+        Author: { OnlineID: 1, Username: meta.creator || '', CountryCode: 'Unknown' },
+        Source: meta.source || '',
+        Tags: meta.tags?.join(' ') || '',
+        PreviewTime: bm.general.previewTime ?? -1,
+        AudioFile: bm.general.audioFilename || '',
+        BackgroundFile: bm.events.find(e => e.type === 'background')?.filename ?? '',
+        UserTags: [],
+      })
+    })
 
     const lastTime = bm.hitObjects.length > 0
       ? Math.max(...bm.hitObjects.map(h => {
@@ -129,7 +134,7 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
       ? Math.round(60000 / positiveTps.reduce((min, tp) => Math.min(min, tp.beatLength), Infinity) * 100) / 100
       : 0
 
-    ctx.beatmaps.write.create({
+    const newBeatmap = ctx.beatmaps.write.create({
       ID: new Realm.BSON.UUID(),
       DifficultyName: meta.version || '',
       Ruleset: ruleset,
@@ -158,7 +163,14 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
       EndTimeObjectCount: bm.hitObjects.filter(h => h.objectType === 'spinner' || h.objectType === 'hold').length,
       TotalObjectCount: bm.hitObjects.length,
     })
+    createdBeatmaps.push(newBeatmap)
   }
+
+  ctx.realm.write(() => {
+    for (const bm of createdBeatmaps) {
+      beatmapSet.Beatmaps.push(bm)
+    }
+  })
 
   return {
     onlineID,
