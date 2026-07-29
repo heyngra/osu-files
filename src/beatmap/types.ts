@@ -9,7 +9,7 @@ export type OsuGeneral = {
   /** @example 0 */
   countdown: number
   /** @example 'normal' */
-  sampleSet: string
+  sampleSet: SampleSet
   /** @example 0.7 */
   stackLeniency: number
   /** @example 0 */
@@ -27,12 +27,15 @@ export type OsuGeneral = {
   /** @example false */
   useSkinSprites?: boolean
   /** @example 'NoChange' */
-  overlayPosition?: string
+  overlayPosition?: OverlayPosition
   /** @example 'Default' */
   skinPreference?: string
   /** @example 'a1b2c3d4e5f6...' */
   audioHash?: string
 }
+
+export type SampleSet = 'normal' | 'soft' | 'drum'
+export type OverlayPosition = 'NoChange' | 'Above' | 'Below'
 
 /** `[Editor]` section of an .osu file. */
 export type OsuEditor = {
@@ -99,6 +102,7 @@ export type OsuBackgroundEvent = {
 /** A video event. */
 export type OsuVideoEvent = {
   type: 'video'
+  startTime: number
   filename: string
   xOffset: number
   yOffset: number
@@ -111,14 +115,8 @@ export type OsuBreakEvent = {
   endTime: number
 }
 
-/** A storyboard event (raw text). */
-export type OsuStoryboardEvent = {
-  type: 'storyboard' // TODO: Create custom Storyboard handling
-  raw: string
-}
-
 /** Union of all .osu event types. */
-export type OsuEvent = OsuBackgroundEvent | OsuVideoEvent | OsuBreakEvent | OsuStoryboardEvent
+export type OsuEvent = OsuBackgroundEvent | OsuVideoEvent | OsuBreakEvent
 
 /** A timing point (red line or green line). */
 export type TimingPoint = {
@@ -258,6 +256,7 @@ export type OsuBeatmap = {
   metadata: OsuMetadata
   difficulty: OsuDifficulty
   events: OsuEvent[]
+  storyboard?: import('./storyboard/index.js').Storyboard
   timingPoints: TimingPoint[]
   colours: OsuColour[]
   hitObjects: HitObject[]

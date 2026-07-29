@@ -1,35 +1,53 @@
 import type { RulesetSetting } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
+import type { RulesetShortName } from './keybindings/types.js'
 import { RulesetSettingQuery } from './get/rulesetsettings.get.js'
+import { LogAction } from './write/logger.js'
+
+function serializeSetting(s: RulesetSetting): Record<string, unknown> {
+  return { RulesetName: s.RulesetName, Variant: s.Variant, Key: s.Key, Value: s.Value }
+}
 
 export function createRulesetSettingModule(ctx: OsuFilesContext) {
-  const q = new RulesetSettingQuery(ctx.realm)
-  q.enableCache = ctx.queryCache ?? true
-  const get = q.proxify()
+  const query = new RulesetSettingQuery(ctx.realm)
+  query.enableCache = ctx.queryCache ?? true
+  const get = query.proxify()
 
-  function getSettings(rulesetName: string, variant = 0): Record<string, string> {
+  const findSetting = (rulesetName: RulesetShortName, variant: number, key: string) =>
+    get.byRulesetNameEquals(rulesetName).byVariantExact(variant).byKeyEquals(key)[0]
+
+  function getSettings(rulesetName: RulesetShortName, variant = 0): Record<string, string> {
     const map: Record<string, string> = {}
-    for (const s of get.byRulesetNameEquals(rulesetName).byVariantExact(variant))
-      map[s.Key] = s.Value
+    for (const setting of get.byRulesetNameEquals(rulesetName).byVariantExact(variant))
+      map[setting.Key] = setting.Value
     return map
   }
 
-  function setSetting(rulesetName: string, key: string, value: string, variant = 0): void {
-    const existing = get.byRulesetNameEquals(rulesetName).byVariantExact(variant).byKeyEquals(key)[0]
+  function setSetting(rulesetName: RulesetShortName, key: string, value: string, variant = 0): void {
+    const settingKey = `${rulesetName}/${variant}/${key}`
+    const existing = findSetting(rulesetName, variant, key)
     if (existing) {
+      const before = serializeSetting(existing)
       ctx.realm.write(() => { existing.Value = value })
+      ctx.logger.log('RulesetSetting', LogAction.Update, settingKey, before, serializeSetting(existing))
     } else {
       ctx.realm.write(() => {
         ctx.realm.create<RulesetSetting>('RulesetSetting', {
           RulesetName: rulesetName, Variant: variant, Key: key, Value: value,
         })
       })
+      ctx.logger.log('RulesetSetting', LogAction.Create, settingKey, null, { RulesetName: rulesetName, Variant: variant, Key: key, Value: value })
     }
   }
 
-  function removeSetting(rulesetName: string, key: string, variant = 0): void {
-    const existing = get.byRulesetNameEquals(rulesetName).byVariantExact(variant).byKeyEquals(key)[0]
-    if (existing) ctx.realm.write(() => { ctx.realm.delete(existing) })
+  function removeSetting(rulesetName: RulesetShortName, key: string, variant = 0): void {
+    const settingKey = `${rulesetName}/${variant}/${key}`
+    const existing = findSetting(rulesetName, variant, key)
+    if (existing) {
+      const before = serializeSetting(existing)
+      ctx.realm.write(() => { ctx.realm.delete(existing) })
+      ctx.logger.log('RulesetSetting', LogAction.Delete, settingKey, before, null)
+    }
   }
 
   return { get, getSettings, setSetting, removeSetting }

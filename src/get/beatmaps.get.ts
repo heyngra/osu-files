@@ -1,5 +1,6 @@
 import Realm from 'realm'
 import type { Beatmap } from '../schema/types.js'
+import type { RulesetShortName } from '../keybindings/types.js'
 import { EntityQuery } from './base.js'
 
 export class BeatmapQuery extends EntityQuery<Beatmap> {
@@ -73,7 +74,7 @@ export class BeatmapQuery extends EntityQuery<Beatmap> {
   /** @example db.beatmaps.get.bySetOnlineIdExact(506483) */
   bySetOnlineIdExact(v: number)               { return this._fkEq('BeatmapSet.OnlineID', v) }
   /** @example db.beatmaps.get.byRulesetShortNameEquals('osu') */
-  byRulesetShortNameEquals(v: string)         { return this._fkEq('Ruleset.ShortName', v) }
+  byRulesetShortNameEquals(v: RulesetShortName){ return this._fkEq('Ruleset.ShortName', v) }
   /** @example db.beatmaps.get.byMetadataTitleEquals('Make A Move') */
   byMetadataTitleEquals(v: string)            { return this._str('Metadata.Title', '==', v) }
   /** @example db.beatmaps.get.byMetadataTitleContains('Move') */

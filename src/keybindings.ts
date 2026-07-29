@@ -5,7 +5,7 @@ import { KeyBindingQuery } from './get/keybindings.get.js'
 import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { registerDefaults as registerDefaultsImpl, type RegisterWrite } from './keybindings/register.js'
-import type { KeyBindingDef, GlobalAction, RulesetAction } from './keybindings/types.js'
+import type { KeyBindingDef, GlobalAction, RulesetAction, RulesetShortName } from './keybindings/types.js'
 import {
   GLOBAL_DEFAULTS, OSU_DEFAULTS, TAIKO_DEFAULTS, CATCH_DEFAULTS,
   getManiaDefaults,
@@ -27,7 +27,7 @@ export function createKeyBindingModule(ctx: OsuFilesContext) {
     delete: (id) => write.delete(id),
   }
 
-  function getActionKeys<RR extends string | undefined | null>(
+  function getActionKeys<RR extends RulesetShortName | undefined | null>(
     rulesetName: RR,
     actionName: RR extends keyof typeof RulesetAction ? keyof (typeof RulesetAction)[RR] : RR extends undefined | null ? keyof typeof GlobalAction : string,
     variant = 0,
@@ -38,7 +38,7 @@ export function createKeyBindingModule(ctx: OsuFilesContext) {
       .map(k => k.KeyCombination ?? 'None')
   }
 
-  function setActionKeys<RR extends string | undefined | null>(
+  function setActionKeys<RR extends RulesetShortName | undefined | null>(
     rulesetName: RR,
     actionName: RR extends keyof typeof RulesetAction ? keyof (typeof RulesetAction)[RR] : RR extends undefined | null ? keyof typeof GlobalAction : string,
     keys: string[],
@@ -65,7 +65,7 @@ export function createKeyBindingModule(ctx: OsuFilesContext) {
      */
     registerDefaults(
       defaults: KeyBindingDef[],
-      rulesetName?: string,
+      rulesetName?: RulesetShortName,
       variant?: number,
     ): { inserted: number; removed: number } {
       const existing = [...get]

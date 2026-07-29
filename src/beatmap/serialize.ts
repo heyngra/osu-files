@@ -3,6 +3,7 @@ import type {
   OsuEvent, TimingPoint, OsuColour, HitObject, HitCircle, HitSlider,
   HitSpinner, HitHold, SliderExtras, SliderCurveType, DurationHitObjectExtras,
 } from './types.js'
+import { serializeStoryboardForOsu } from './storyboard/serialize.js'
 
 function fmt(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(15).replace(/\.?0+$/, '')
@@ -80,13 +81,10 @@ function writeEvents(events: OsuEvent[]): string {
         lines.push(`0,0,"${ev.filename}",${ev.xOffset},${ev.yOffset}`)
         break
       case 'video':
-        lines.push(`1,0,"${ev.filename}",${ev.xOffset},${ev.yOffset}`)
+        lines.push(`1,${ev.startTime},"${ev.filename}",${ev.xOffset},${ev.yOffset}`)
         break
       case 'break':
         lines.push(`2,${ev.startTime},${ev.endTime}`)
-        break
-      case 'storyboard':
-        lines.push(ev.raw)
         break
     }
   }
@@ -190,12 +188,16 @@ export function serializeOsu(beatmap: OsuBeatmap): string {
     sections.push(writeEditor(beatmap.editor), '')
   }
 
+  const eventsSection = writeEvents(beatmap.events)
+  const sbText = beatmap.storyboard ? serializeStoryboardForOsu(beatmap.storyboard) : ''
+  const finalEvents = sbText ? eventsSection + '\n' + sbText : eventsSection
+
   sections.push(
     writeMetadata(beatmap.metadata),
     '',
     writeDifficulty(beatmap.difficulty),
     '',
-    writeEvents(beatmap.events),
+    finalEvents,
     '',
     writeTimingPoints(beatmap.timingPoints),
     '',

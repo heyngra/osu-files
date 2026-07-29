@@ -3,22 +3,21 @@ import type { OsuFilesContext } from '../context.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from '../osz/types.js'
 import type { BeatmapSet, Beatmap } from '../schema/types.js'
-
-const MODE_TO_SHORTNAME: Record<number, string> = {
-  0: 'osu', 1: 'taiko', 2: 'fruits', 3: 'mania',
-}
+import { MODE_TO_SHORTNAME, RULESETS, RULESET_INSTANTIATION } from '../ruleset-info.js'
 
 function resolveRulesetByMode(ctx: OsuFilesContext, mode: number) {
   const shortName = MODE_TO_SHORTNAME[mode]
   return shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] ?? undefined : undefined
 }
 
-const STANDARD_RULESETS = [
-  { ShortName: 'osu', OnlineID: 0, Name: 'osu!', InstantiationInfo: 'osu.Game.Rulesets.Osu.OsuRuleset, osu.Game.Rulesets.Osu', Available: true, LastAppliedDifficultyVersion: 0 },
-  { ShortName: 'taiko', OnlineID: 1, Name: 'osu!taiko', InstantiationInfo: 'osu.Game.Rulesets.Taiko.TaikoRuleset, osu.Game.Rulesets.Taiko', Available: true, LastAppliedDifficultyVersion: 0 },
-  { ShortName: 'fruits', OnlineID: 2, Name: 'osu!catch', InstantiationInfo: 'osu.Game.Rulesets.Catch.CatchRuleset, osu.Game.Rulesets.Catch', Available: true, LastAppliedDifficultyVersion: 0 },
-  { ShortName: 'mania', OnlineID: 3, Name: 'osu!mania', InstantiationInfo: 'osu.Game.Rulesets.Mania.ManiaRuleset, osu.Game.Rulesets.Mania', Available: true, LastAppliedDifficultyVersion: 0 },
-]
+const STANDARD_RULESETS = RULESETS.map(r => ({
+  ShortName: r.shortName,
+  OnlineID: r.onlineID,
+  Name: r.name,
+  InstantiationInfo: RULESET_INSTANTIATION[r.shortName],
+  Available: true,
+  LastAppliedDifficultyVersion: 0,
+}))
 
 /** A beatmap entry within an import set input. */
 export type ImportSetBeatmap = {

@@ -38,7 +38,9 @@ export function validateKeyCombo(combo: string): void {
   }
 }
 
-export function resolveAction(rulesetName: string | undefined, actionName: string): number {
+import type { RulesetShortName } from './types.js'
+
+export function resolveAction(rulesetName: RulesetShortName | undefined, actionName: string): number {
   if (rulesetName === undefined || rulesetName === null) {
     const v = (GlobalAction as Record<string, number | undefined>)[actionName]
     if (v === undefined) throw new Error(`Unknown global action '${actionName}'`)

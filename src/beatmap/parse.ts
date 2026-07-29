@@ -15,7 +15,11 @@ import type {
   SliderExtras,
   SliderCurveType,
   HitObjectBase,
+  SampleSet,
+  OverlayPosition,
 } from './types.js'
+import { parseStoryboard } from './storyboard/parse.js'
+import type { Storyboard } from './storyboard/storyboard.js'
 
 const HEADER_RE = /^osu\s+file\s+format\s+v(\d+)/i
 const SECTION_RE = /^\[(\w+)\]$/
@@ -99,7 +103,6 @@ export function parseOsu(content: string): OsuBeatmap {
   const hitObjects: HitObject[] = []
 
   const storyboardLines: string[] = []
-  let inStoryboardLayer = false
 
   for (const raw of lines) {
     const line = raw.trim()
@@ -114,7 +117,6 @@ export function parseOsu(content: string): OsuBeatmap {
     const sectionMatch = line.match(SECTION_RE)
     if (sectionMatch) {
       currentSection = sectionMatch[1] as Section
-      inStoryboardLayer = false
       continue
     }
 
@@ -125,7 +127,7 @@ export function parseOsu(content: string): OsuBeatmap {
         parseGeneralLine(line, general, timingOffset)
         break
       case 'Editor':
-        editor = editor ?? {}
+        editor = editor ?? { bookmarks: [], distanceSpacing: 1, beatDivisor: 4, gridSize: 4, timelineZoom: 1 }
         parseEditorLine(line, editor)
         break
       case 'Metadata':
@@ -135,14 +137,15 @@ export function parseOsu(content: string): OsuBeatmap {
         parseDifficultyLine(line, difficulty)
         break
       case 'Events':
-        if (line.startsWith(' ') || line.startsWith('_')) {
-          storyboardLines.push(line)
-          inStoryboardLayer = true
-        } else if (inStoryboardLayer || !line.match(/^\d/)) {
-          storyboardLines.push(line)
+        if (raw.startsWith(' ') || raw.startsWith('_')) {
+          storyboardLines.push(raw)
         } else {
-          inStoryboardLayer = false
-          parseEventLine(line, events, storyboardLines, timingOffset)
+          const firstNum = /^(\d+)/.exec(line)
+          if (firstNum && ['0', '1', '2'].includes(firstNum[1])) {
+            parseEventLine(line, events, timingOffset)
+          } else {
+            storyboardLines.push(raw)
+          }
         }
         break
       case 'TimingPoints':
@@ -157,8 +160,14 @@ export function parseOsu(content: string): OsuBeatmap {
     }
   }
 
+  let storyboard: Storyboard | undefined
   if (storyboardLines.length > 0) {
-    events.push({ type: 'storyboard', raw: storyboardLines.join('\n') })
+    storyboard = parseStoryboard(storyboardLines.join('\n'), fileFormat)
+  }
+
+  const background = events.find(e => e.type === 'background')
+  if (storyboard && background) {
+    storyboard.backgroundOffset = { x: background.xOffset, y: background.yOffset }
   }
 
   return {
@@ -168,6 +177,7 @@ export function parseOsu(content: string): OsuBeatmap {
     metadata: metadata as OsuMetadata,
     difficulty: difficulty as OsuDifficulty,
     events,
+    storyboard,
     timingPoints,
     colours,
     hitObjects,
@@ -187,7 +197,7 @@ function parseGeneralLine(line: string, g: Partial<OsuGeneral>, timingOffset = 0
       break
     }
     case 'Countdown': g.countdown = parseInt(val); break
-    case 'SampleSet': g.sampleSet = val.toLowerCase(); break
+    case 'SampleSet': g.sampleSet = val.toLowerCase() as SampleSet; break
     case 'StackLeniency': g.stackLeniency = parseFloat(val); break
     case 'Mode': g.mode = parseInt(val); break
     case 'LetterboxInBreaks': g.letterboxInBreaks = toBool(val); break
@@ -196,7 +206,7 @@ function parseGeneralLine(line: string, g: Partial<OsuGeneral>, timingOffset = 0
     case 'CountdownOffset': g.countdownOffset = parseInt(val); break
     case 'SpecialStyle': g.specialStyle = parseInt(val); break
     case 'UseSkinSprites': g.useSkinSprites = toBool(val); break
-    case 'OverlayPosition': g.overlayPosition = val.toLowerCase(); break
+    case 'OverlayPosition': g.overlayPosition = val.toLowerCase() as OverlayPosition; break
     case 'SkinPreference': g.skinPreference = val; break
     case 'AudioHash': g.audioHash = val; break
   }
@@ -249,12 +259,7 @@ function parseDifficultyLine(line: string, d: Partial<OsuDifficulty>): void {
   }
 }
 
-function parseEventLine(line: string, events: OsuEvent[], sbLines: string[], timingOffset = 0): void {
-  if (sbLines.length > 0) {
-    events.push({ type: 'storyboard', raw: sbLines.join('\n') })
-    sbLines.length = 0
-  }
-
+function parseEventLine(line: string, events: OsuEvent[], timingOffset = 0): void {
   const parts = line.split(',')
   if (parts.length < 1) return
   const eventType = parseInt(parts[0].trim())
@@ -272,6 +277,7 @@ function parseEventLine(line: string, events: OsuEvent[], sbLines: string[], tim
     case 1: {
       events.push({
         type: 'video',
+        startTime: parseInt(parts[1]?.trim()) + timingOffset,
         filename: parts[2]?.replace(/^"|"$/g, '') ?? '',
         xOffset: parseInt(parts[3]?.trim()) || 0,
         yOffset: parseInt(parts[4]?.trim()) || 0,
@@ -284,10 +290,6 @@ function parseEventLine(line: string, events: OsuEvent[], sbLines: string[], tim
         startTime: (parseInt(parts[1]?.trim()) || 0) + timingOffset,
         endTime: (parseInt(parts[2]?.trim()) || 0) + timingOffset,
       })
-      break
-    }
-    default: {
-      events.push({ type: 'storyboard', raw: line })
       break
     }
   }

@@ -19,18 +19,13 @@ export enum RANK {
   SH = 5,
   F = -1,
 }
+import { MODE_TO_SHORTNAME, SHORTNAME_TO_MODE as SHORTNAME_TO_MODE_CANON } from '../ruleset-info.js'
+
 /** Maps GameMode to its short name (osu, taiko, fruits, mania). */
-export const MODE_SHORTNAME: Record<GameMode, string> = {
-  [GameMode.Osu]: 'osu',
-  [GameMode.Taiko]: 'taiko',
-  [GameMode.Fruits]: 'fruits',
-  [GameMode.Mania]: 'mania',
-}
+export const MODE_SHORTNAME: Record<GameMode, string> = MODE_TO_SHORTNAME as Record<GameMode, string>
 
 /** Maps short name to GameMode value. */
-export const SHORTNAME_TO_MODE: Record<string, number> = {
-  osu: 0, taiko: 1, fruits: 2, mania: 3,
-}
+export const SHORTNAME_TO_MODE: Record<string, number> = SHORTNAME_TO_MODE_CANON
 
 /** Bit flags for legacy osu! mods. */
 export enum LegacyModsFlag {

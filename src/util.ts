@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import { existsSync, mkdirSync } from 'fs'
-import { join, sep } from 'path'
+import { join, resolve, sep } from 'path'
 
 /**
  * Computes SHA-256 hex digest.
@@ -29,7 +29,13 @@ export function md5(buf: Buffer): string {
  * fileStoragePath('/store', 'abcdef123') // '/store/a/ab/abcdef123'
  */
 export function fileStoragePath(base: string, hash: string): string {
-  return join(base, hash[0], hash.substring(0, 2), hash)
+  const path = join(base, hash[0], hash.substring(0, 2), hash)
+  const root = resolve(base)
+  const resolved = resolve(path)
+  if (resolved !== root && !resolved.startsWith(root + sep)) {
+    throw new Error('File hash resolves outside the files folder')
+  }
+  return path
 }
 
 /**

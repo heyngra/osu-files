@@ -41,7 +41,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
   const filesWrite = createCrud<RealmFile>(ctx, getConfig('File')!)
 
   return {
-    get: get,
+    get,
     write,
 
     importOsk: async (filePath: string): Promise<ImportedSkinData> => {

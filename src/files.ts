@@ -1,5 +1,6 @@
-import { rmSync } from 'fs'
+import { readFileSync, rmSync } from 'fs'
 import type { File } from './schema/types.js'
+import type { FileRef } from './types.js'
 import type { OsuFilesContext } from './context.js'
 import { FileQuery } from './get/files.get.js'
 import { createCrud } from './write/util.js'
@@ -47,6 +48,19 @@ export function createFileModule(ctx: OsuFilesContext) {
     get,
     write: createCrud<File>(ctx, getConfig('File')!),
     cleanupOrphanedFiles: () => cleanupOrphanedFiles(ctx),
+
+    fileRef(hash: string, filename: string): FileRef {
+      return { filename, hash }
+    },
+
+    fileRefWithContent(hash: string, filename: string): FileRef {
+      const ref: FileRef = { filename, hash }
+      if (ctx.filesFolderPath) {
+        const p = fileStoragePath(ctx.filesFolderPath, hash)
+        try { ref.content = readFileSync(p) } catch {}
+      }
+      return ref
+    },
   }
 }
 

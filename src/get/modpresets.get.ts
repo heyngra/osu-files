@@ -1,5 +1,6 @@
 import Realm from 'realm'
 import type { ModPreset } from '../schema/types.js'
+import type { RulesetShortName } from '../keybindings/types.js'
 import { EntityQuery } from './base.js'
 
 export class ModPresetQuery extends EntityQuery<ModPreset> {
@@ -21,5 +22,5 @@ export class ModPresetQuery extends EntityQuery<ModPreset> {
   byDeletePending(v: boolean)            { return this._bool('DeletePending', v) }
 
   /** @example db.modPresets.get.byRulesetShortNameEquals('osu') */
-  byRulesetShortNameEquals(v: string)     { return this._fkEq('Ruleset.ShortName', v) }
+  byRulesetShortNameEquals(v: RulesetShortName)     { return this._fkEq('Ruleset.ShortName', v) }
 }

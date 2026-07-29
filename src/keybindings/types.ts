@@ -138,6 +138,8 @@ export const RulesetName = {
   Mania: 'mania',
 } as const
 
+export type RulesetShortName = 'osu' | 'taiko' | 'fruits' | 'mania' | (string & {})
+
 export const RulesetOnlineID = {
   Osu: 0,
   Taiko: 1,

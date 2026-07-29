@@ -1,4 +1,4 @@
-import type { KeyBindingDef } from './types.js'
+import type { KeyBindingDef, RulesetShortName } from './types.js'
 import type { KeyBinding } from '../schema/types.js'
 
 export type RegisterWrite = {
@@ -10,7 +10,7 @@ export function registerDefaults(
   existingBindings: KeyBinding[],
   defaults: KeyBindingDef[],
   write: RegisterWrite,
-  rulesetName?: string,
+  rulesetName?: RulesetShortName,
   variant?: number,
 ): { inserted: number; removed: number } {
   let inserted = 0

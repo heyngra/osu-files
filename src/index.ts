@@ -32,7 +32,10 @@ import type { BeatmapSetData } from './osz/types.js'
 import { parseOsu } from './beatmap/parse.js'
 import { serializeOsu } from './beatmap/serialize.js'
 import type { OsuBeatmap } from './beatmap/types.js'
-import { realmBeatmapToOsuBeatmap, realmSetToBeatmapSetData } from './beatmap/migrate.js'
+import type { Anchor, Vec2, StoryboardElementSource } from './beatmap/storyboard/types.js'
+import { realmBeatmapToOsuBeatmap, realmSetToBeatmapSetData, saveOsuBeatmap, createFileRef } from './beatmap/migrate.js'
+import { StoryboardSprite, StoryboardAnimation, StoryboardSample } from './beatmap/storyboard/elements.js'
+import type { FileRef } from './types.js'
 import { importOsr, parseOsr as parseOsrFile, type OsrImportOptions } from './osr/import.js'
 import { exportOsr, toBuffer as exportOsrToBuffer } from './osr/export.js'
 import { parseOsr as parseOsrBinary, computeReplayMD5 } from './osr/parse.js'
@@ -55,12 +58,26 @@ export { GLOBAL_DEFAULTS, OSU_DEFAULTS, TAIKO_DEFAULTS, CATCH_DEFAULTS, getMania
 export { InputKey } from './keybindings/keys.js'
 
 export type { BeatmapSetData, BeatmapSetFile } from './osz/types.js'
+export { FileRef } from './types.js'
+export type { StoryboardLayerName, TriggerName, BlendingMode } from './beatmap/storyboard/types.js'
 export type {
   OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,
   TimingPoint, OsuColour, OsuEvent, HitObject, HitCircle, HitSlider,
-  HitSpinner, HitHold, SliderExtras,
+  HitSpinner, HitHold, SliderExtras, SampleSet, OverlayPosition,
 } from './beatmap/types.js'
 export { SliderCurveType } from './beatmap/types.js'
+export type { RulesetShortName } from './keybindings/types.js'
+export { createFileRef } from './beatmap/migrate.js'
+
+export {
+  Storyboard, StoryboardLayer, StoryboardSprite, StoryboardAnimation, StoryboardSample,
+  StoryboardCommandGroup, StoryboardLoopingGroup, StoryboardTriggerGroup,
+  StoryboardAlphaCommand, StoryboardXCommand, StoryboardYCommand,
+  StoryboardScaleCommand, StoryboardVectorScaleCommand, StoryboardRotationCommand,
+  StoryboardColourCommand, StoryboardFlipHCommand, StoryboardFlipVCommand, StoryboardBlendingCommand,
+  Anchor, Easing, LoopType, CommandType,
+  parseStoryboard, parseOsb, serializeStoryboard, serializeOsb,
+} from './beatmap/storyboard/index.js'
 
 /**
  * The full API object returned by {@link init}.
@@ -137,6 +154,12 @@ export type OsuFilesAPI = {
     getFullData(beatmapId: string): OsuBeatmap | undefined
     /** Reads all beatmaps in a set from the files folder and parses them. */
     getFullDataSet(setId: string): BeatmapSetData | undefined
+    /** Saves a modified beatmap back to disk and updates realm references. */
+    save(beatmapId: string, beatmap: OsuBeatmap): boolean
+    /** Create a FileRef with validation. Content auto-hashes. Hash checked against realm if available. */
+    createFileRef(filename: string, source: { hash?: string; content?: Buffer }): FileRef
+    /** Create a sprite from a validated file ref. */
+    createSprite(fileRef: FileRef, origin?: Anchor, initialPosition?: Vec2, source?: StoryboardElementSource): StoryboardSprite
   }
 }
 
@@ -289,6 +312,14 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
       getFullData: (beatmapId: string) => realmBeatmapToOsuBeatmap(ctx, beatmapId),
       /** Reads all beatmaps in a set from the files folder and parses them. */
       getFullDataSet: (setId: string) => realmSetToBeatmapSetData(ctx, setId),
+      /** Saves a modified beatmap back to disk and updates realm references. */
+      save: (beatmapId: string, beatmap: OsuBeatmap) => saveOsuBeatmap(ctx, beatmapId, beatmap),
+      /** Create a FileRef with validation. Content auto-hashes. Hash checked against realm if available. */
+      createFileRef: (filename: string, source: { hash?: string; content?: Buffer }) =>
+        createFileRef(filename, source, ctx),
+      /** Create a sprite from a validated file ref. */
+      createSprite: (fileRef: FileRef, origin?: Anchor, initialPosition?: Vec2, source?: StoryboardElementSource) =>
+        new StoryboardSprite(fileRef, origin, initialPosition, source),
     },
   }
 }

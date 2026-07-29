@@ -1,5 +1,6 @@
 import Realm from 'realm'
 import type { Score } from '../schema/types.js'
+import type { RulesetShortName } from '../keybindings/types.js'
 import { EntityQuery } from './base.js'
 
 export class ScoreQuery extends EntityQuery<Score> {
@@ -65,7 +66,7 @@ export class ScoreQuery extends EntityQuery<Score> {
   /** @example db.scores.get.byUserCountryCodeEquals('KR') */
   byUserCountryCodeEquals(v: string)        { return this._str('User.CountryCode', '==', v) }
   /** @example db.scores.get.byRulesetShortNameEquals('osu') */
-  byRulesetShortNameEquals(v: string)       { return this._fkEq('Ruleset.ShortName', v) }
+  byRulesetShortNameEquals(v: RulesetShortName)       { return this._fkEq('Ruleset.ShortName', v) }
 
   /** @example db.scores.get.byPpAbove(300) */
   byPpAbove(v: number)                  { return this._num('PP', '>=', v) }

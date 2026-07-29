@@ -1,0 +1,11 @@
+{
+  "name": "create-storyboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "osu-files": "file:../.."
+  }
+}
