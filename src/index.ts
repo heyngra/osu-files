@@ -1,7 +1,15 @@
-import { writeFileSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync } from 'fs'
 import Realm from 'realm'
+import { basename, dirname, join } from 'path'
+import { tmpdir } from 'os'
 import { Schema } from './schema/index.js'
 import type { OsuFilesContext } from './context.js'
+import { registerContextGeneration } from './context.js'
+import { createFileStore } from './file-store.js'
+import { RealmSession } from './realm-session.js'
+import { CURRENT_SCHEMA_VERSION, MIN_SCHEMA_VERSION } from './schema/version.js'
+import { writeFileAtomic } from './util.js'
+import { runMigrations, type MigrationReport, type MigrationEvent } from './migrations.js'
 import type { BeatmapModule } from './beatmaps.js'
 import type { ScoreModule } from './scores.js'
 import type { BeatmapSetModule } from './sets.js'
@@ -29,12 +37,13 @@ import { getConfig } from './write/factory.js'
 import { importOsz } from './osz/import.js'
 import { exportOsz, exportOszFromData } from './osz/export.js'
 import type { BeatmapSetData } from './osz/types.js'
+import type { ArchiveLimits } from './osz/import.js'
 import { parseOsu } from './beatmap/parse.js'
 import { serializeOsu } from './beatmap/serialize.js'
 import type { OsuBeatmap } from './beatmap/types.js'
 import type { Anchor, Vec2, StoryboardElementSource } from './beatmap/storyboard/types.js'
 import { realmBeatmapToOsuBeatmap, realmSetToBeatmapSetData, saveOsuBeatmap, createFileRef } from './beatmap/migrate.js'
-import { StoryboardSprite, StoryboardAnimation, StoryboardSample } from './beatmap/storyboard/elements.js'
+import { StoryboardSprite } from './beatmap/storyboard/elements.js'
 import type { FileRef } from './types.js'
 import { importOsr, parseOsr as parseOsrFile, type OsrImportOptions } from './osr/import.js'
 import { exportOsr, toBuffer as exportOsrToBuffer } from './osr/export.js'
@@ -44,8 +53,11 @@ import type { Score } from './schema/types.js'
 import type { ImportedSkinData } from './skin/import.js'
 
 export * from './schema/index.js'
-export type { OsuFilesContext }
 export { RollbackEntry, type RollbackOptions }
+export { FileStore } from './file-store.js'
+export { RealmSession, RealmClosedError, RealmReadOnlyError } from './realm-session.js'
+export { CURRENT_SCHEMA_VERSION, MIN_SCHEMA_VERSION } from './schema/version.js'
+export { type MigrationEvent, type MigrationReport } from './migrations.js'
 export { hasFilesFolder } from './context.js'
 export { BUILT_IN_SKINS, BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from './skin/constants.js'
 export type { ImportedSkinData } from './skin/import.js'
@@ -82,11 +94,13 @@ export {
 /**
  * The full API object returned by {@link init}.
  * Every sub-module is scoped under its name; query methods are under `.get.`
- * (e.g. `db.scores.get.recent(10)`, `db.beatmaps.get.byId(id)`).
+ * (e.g. `db.scores.get.byDateAfter(someDate)`, `db.beatmaps.get.byId(id)`).
  */
 export type OsuFilesAPI = {
-  /** The shared context with realm, logger, and all modules. */
-  ctx: OsuFilesContext
+  /** Guarded Realm access for advanced callers. */
+  realm: RealmSession
+  /** The report from the most recent Realm migration, if one ran. */
+  migration?: MigrationReport
   /** Closes the Realm connection and disables rollback logging. */
   close(): void
   /** Rollback logger for inspecting and reverting write operations. */
@@ -169,7 +183,7 @@ export type OsuFilesAPI = {
  * init('client.realm', { readOnly: true, filesFolderPath: './files' })
  */
 export type InitOptions = {
-  /** @default 51 */
+  /** @default CURRENT_SCHEMA_VERSION */
   schemaVersion?: number
   /** @default false */
   readOnly?: boolean
@@ -181,38 +195,83 @@ export type InitOptions = {
   checkHash?: boolean
   /** Cache query results in memory across repeated accesses on the same query object. @default true */
   queryCache?: boolean
+  /** Limits for untrusted archive input. */
+  archiveLimits?: ArchiveLimits
+  /** Realm migration options. */
+  migration?: {
+    /** Legacy collection database path. Defaults to a sibling collection.db. */
+    legacyCollectionPath?: string
+    /** Keep a pre-migration copy under the system temporary directory. @default true */
+    backup?: boolean
+    /** Receives migration progress and warning events. */
+    onEvent?: (event: MigrationEvent) => void
+  }
 }
 /**
  * Opens an osu!lazer client.realm database.
  *
  * @param path - Path to client.realm.
  * @param options - Configuration options.
- * @returns The osu-files API object with close(), rollback, and all sub-modules.
+ * @returns The osu-files API object with close(), logger, and all sub-modules.
  * @example
  * const db = init('./client.realm', { filesFolderPath: './files' })
  * const sets = db.sets.get
+ * const rawRealm = db.realm.raw
  * db.close()
  */
 export function init(path: string, options?: InitOptions): OsuFilesAPI {
-  const { schemaVersion = 51, readOnly = false, rollback: rb, filesFolderPath, checkHash, queryCache = true } = options ?? {}
+  const {
+    schemaVersion = CURRENT_SCHEMA_VERSION,
+    readOnly = false,
+    rollback: rb,
+    filesFolderPath,
+    checkHash,
+    queryCache = true,
+    archiveLimits,
+    migration: migrationOptions,
+  } = options ?? {}
+  if (schemaVersion < MIN_SCHEMA_VERSION)
+    throw new Error(`[osu-files] Schema version ${schemaVersion} is older than supported version ${MIN_SCHEMA_VERSION}`)
+  if (schemaVersion > CURRENT_SCHEMA_VERSION)
+    throw new Error(`[osu-files] Schema version ${schemaVersion} is newer than supported version ${CURRENT_SCHEMA_VERSION}`)
+
   const rollbackOpts: RollbackOptions = rb === undefined
     ? { enabled: !readOnly }
-    : (rb === false ? { enabled: false } : { enabled: !readOnly, ...rb })
+    : (rb === false ? { enabled: false } : { enabled: !readOnly, ...rb, ...(readOnly ? { enabled: false } : {}) })
+
+  const migrationEvents: MigrationEvent[] = []
+  let migrationReport: MigrationReport | undefined
+  const previousVersion = getSchemaVersion(path)
+  if (!readOnly && migrationOptions?.backup !== false && previousVersion !== undefined && previousVersion < schemaVersion)
+    createMigrationBackup(path)
 
   const realm = new Realm({
     path,
     schema: Schema as Realm.ObjectSchema[],
     schemaVersion,
     readOnly,
+    onMigration: readOnly ? undefined : (oldRealm, newRealm) => {
+      migrationReport = runMigrations(oldRealm, newRealm, {
+        filesFolderPath,
+        legacyCollectionPath: migrationOptions?.legacyCollectionPath ?? join(dirname(path), 'collection.db'),
+        events: migrationEvents,
+        onEvent: migrationOptions?.onEvent,
+      })
+    },
   })
 
   const logger = new RollbackLogger(rollbackOpts, realm, getConfig)
+  const queryGeneration = { value: 0 }
+  const session = new RealmSession(realm, readOnly, () => queryGeneration.value++)
+  const fileStore = createFileStore(filesFolderPath, readOnly)
 
-  const ctx = { realm, logger, filesFolderPath, checkHash, queryCache } as OsuFilesContext
+  const ctx = { realm, session, logger, fileStore, readOnly, archiveLimits, filesFolderPath, checkHash, queryCache, queryGeneration } as OsuFilesContext
+  registerContextGeneration(ctx)
 
   const beatmaps = createBeatmapModule(ctx)
   const scores = createScoreModule(ctx)
   const files = createFileModule(ctx)
+  ctx.files = files
   const rulesets = createRulesetModule(ctx)
   const rulesetSettings = createRulesetSettingModule(ctx)
   const skins = createSkinModule(ctx)
@@ -220,7 +279,6 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
   const metadata = createBeatmapMetadataModule(ctx)
   ctx.beatmaps = beatmaps
   ctx.scores = scores
-  ctx.files = files
   ctx.rulesets = rulesets
   ctx.rulesetSettings = rulesetSettings
   ctx.skins = skins
@@ -228,13 +286,15 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
   ctx.metadata = metadata
 
   return {
-    /** The shared context with realm, logger, and all modules. */
-    ctx,
+    /** Guarded Realm access for advanced callers. */
+    realm: session,
+    /** The report from the most recent Realm migration, if one ran. */
+    migration: migrationReport,
 
     /** Closes the Realm connection and disables rollback logging. */
     close() {
       logger.disable()
-      realm.close()
+      session.close()
     },
 
     /** Rollback logger for inspecting and reverting write operations. */
@@ -285,8 +345,8 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
       parse: (buffer: Buffer) => parseOsrBinary(buffer),
       /** Parses an .osr replay file into a Score object without writing to realm. */
       parseOsr: (filePath: string, options?: OsrImportOptions) => parseOsrFile(ctx, filePath, options),
-    /** Serialises a Score into an .osr replay buffer without writing to disk. */
-    toBuffer: (score: Score) => exportOsrToBuffer(ctx, score),
+      /** Serialises a Score into an .osr replay buffer without writing to disk. */
+      toBuffer: (score: Score) => exportOsrToBuffer(ctx, score),
       /** Computes an MD5 hash for matching lazer replays by username and timestamp. */
       computeReplayMD5,
     },
@@ -298,7 +358,7 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
       /** Exports a skin to an .osk file on disk. */
       export: async (skinId: string, outputPath: string) => {
         const buf = await skins.exportOsk(skinId)
-        writeFileSync(outputPath, buf)
+        writeFileAtomic(outputPath, buf)
       },
     },
 
@@ -322,6 +382,18 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
         new StoryboardSprite(fileRef, origin, initialPosition, source),
     },
   }
+}
+
+function getSchemaVersion(path: string): number | undefined {
+  if (!existsSync(path)) return undefined
+  try { return Realm.schemaVersion(path) } catch { return undefined }
+}
+
+function createMigrationBackup(path: string): void {
+  const directory = join(tmpdir(), 'osu-files', 'migrations')
+  mkdirSync(directory, { recursive: true })
+  const destination = join(directory, `${basename(path)}.${process.pid}.${Date.now()}.realm`)
+  copyFileSync(path, destination)
 }
 
 export default init;

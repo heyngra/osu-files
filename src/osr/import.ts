@@ -1,27 +1,21 @@
-import { readFileSync, existsSync, writeFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
 import { parseOsr as parseOsrBuffer } from './parse.js'
-import { sha256, fileStoragePath, ensureParentDir } from '../util.js'
+import { sha256, fileStoragePath } from '../util.js'
 import type { ParsedReplay } from './types.js'
-import { MODE_SHORTNAME, LegacyModsFlag, MOD_FLAG_MAP, RANK } from './types.js'
+import { MODE_SHORTNAME, MOD_FLAG_MAP, RANK } from './types.js'
 import { parseOsu } from '../beatmap/parse.js'
 import type { LegacyScoreAttributes, LegacyBeatmapConversionDifficultyInfo } from './legacy-conversion.js'
 import { computeLegacyScoreAttributes, convertFromLegacyTotalScore, roundHalfEven } from './legacy-conversion.js'
 import type { Score, Beatmap, RealmUser, RealmNamedFileUsage } from '../schema/types.js'
+import { assertWritable, writeRealm } from '../context.js'
 
 /**
- * Options for importing an .osr replay into the osu!lazer realm.
- * 
- * @param resolveUser - Resolves the player's osu! user ID when not embedded in the replay file.
- *  @default true
- *
- *   When enabled, the import tries three sources in order:
- *     1. Lazer extra data.
- *     2. Realm lookup — searches existing Scores with the same username
- *     3. Falls back to `OnlineID = 1`
- *
- *   When disabled, always uses `OnlineID = 1` (guest).
+ * Options for importing an .osr replay into Realm.
+ * @param resolveUser - Look up the player when the replay has no user ID. @default true
+ * @example
+ * db.osr.import('score.osr', { resolveUser: false })
  */
 export type OsrImportOptions = {
   requireBeatmap?: boolean
@@ -124,20 +118,15 @@ function computeStandardisedScore(
   beatmap?: Beatmap,
   options?: OsrImportOptions,
 ): { totalScore: number; totalScoreWithoutMods: number } {
-  if (parsed.parsedExtra?.total_score_without_mods) {
-    let modMultiplier = 1
-    try {
-      const modList = JSON.parse(modsStr) as { acronym: string }[]
-      for (const m of modList) {
-        const mult = FALLBACK_MOD_MULTIPLIER[m.acronym]
-        if (mult !== undefined) modMultiplier *= mult
-      }
-    } catch {}
+  if (parsed.parsedExtra?.total_score_without_mods !== undefined) {
     return {
       totalScoreWithoutMods: parsed.parsedExtra.total_score_without_mods,
-      totalScore: roundHalfEven(parsed.parsedExtra.total_score_without_mods * modMultiplier),
+      totalScore: parsed.totalScore,
     }
   }
+
+  if (parsed.gameVersion >= 30000000)
+    return { totalScore: parsed.totalScore, totalScoreWithoutMods: parsed.totalScore }
 
   if (options?.convertFromLegacyScore !== false && parsed.gameVersion < 30000000) {
     const modList: { acronym: string }[] = JSON.parse(modsStr)
@@ -192,6 +181,97 @@ function accuracy(parsed: ParsedReplay): number {
   return totalHits > 0 ? (300 * parsed.count300 + 100 * parsed.count100 + 50 * parsed.count50) / (300 * totalHits) : 0
 }
 
+function prepareScore(
+  ctx: OsuFilesContext,
+  parsed: ParsedReplay,
+  buffer: Buffer,
+  options?: OsrImportOptions,
+  reuseExistingLegacyScore = false,
+): Score {
+  const { requireBeatmap = false, suppressWarning = false, resolveUser = true } = options ?? {}
+  const onlineId = parsed.parsedExtra?.online_id ?? 0
+  let userId = parsed.parsedExtra?.user_id ?? 0
+  let resolvedUser: RealmUser | undefined
+
+  if (resolveUser && (!userId || userId <= 0)) {
+    try {
+      const existing = [...ctx.realm.objects<Score>('Score').filtered(
+        'User.Username == $0 AND User.OnlineID > 1', parsed.playerName,
+      )]
+      if (existing.length > 0) {
+        const u = existing[0].User!
+        userId = u.OnlineID
+        resolvedUser = { OnlineID: u.OnlineID, Username: u.Username, CountryCode: u.CountryCode }
+      }
+    } catch {
+      // Realm JS may reject string params on some schemas.
+    }
+  }
+
+  const hash = sha256(buffer)
+  const beatmap = parsed.beatmapMD5 ? ctx.beatmaps.get.byMd5Equals(parsed.beatmapMD5)[0] : undefined
+  if (!beatmap) {
+    if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
+    if (!suppressWarning) console.warn(`[osu-files] Beatmap '${parsed.beatmapMD5}' not found in realm, importing score without beatmap reference`)
+  }
+
+  const shortName = MODE_SHORTNAME[parsed.mode]
+  const ruleset = shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] : undefined
+  const acc = accuracy(parsed)
+  const modsStr = buildMods(parsed)
+  let { totalScore, totalScoreWithoutMods } = computeStandardisedScore(parsed, modsStr, ctx, beatmap, options)
+
+  if (reuseExistingLegacyScore) {
+    const beatmapHash = beatmap?.Hash ?? parsed.beatmapMD5
+    if (beatmapHash) {
+      const existing = [...ctx.realm.objects<Score>('Score').filtered(
+        'BeatmapHash == $0 AND Mods == $1 AND DeletePending == false AND IsLegacyScore == true',
+        beatmapHash, modsStr,
+      )]
+      let best: Score | undefined
+      for (const score of existing) {
+        if (Math.abs(score.Accuracy - acc) < 1e-9 && score.TotalScore > 0) {
+          if (!best || score.TotalScore > best.TotalScore) best = score
+        }
+      }
+      if (best) {
+        totalScore = best.TotalScore
+        totalScoreWithoutMods = best.TotalScoreWithoutMods
+      }
+    }
+  }
+
+  return {
+    ID: new Realm.BSON.UUID(),
+    BeatmapInfo: beatmap,
+    Ruleset: ruleset,
+    Files: [],
+    Hash: hash,
+    DeletePending: false,
+    TotalScore: totalScore,
+    MaxCombo: parsed.maxCombo,
+    Accuracy: acc,
+    Date: parsed.timestamp,
+    PP: undefined,
+    OnlineID: onlineId > 0 ? onlineId : -1,
+    LegacyOnlineID: parsed.onlineScoreID > 0 ? parsed.onlineScoreID : -1,
+    User: resolvedUser ?? { OnlineID: userId > 0 ? userId : 1, Username: parsed.playerName, CountryCode: 'Unknown' },
+    Mods: modsStr,
+    Statistics: buildStatistics(parsed),
+    Rank: rankFromExtra(parsed.parsedExtra?.rank) ?? computeRank(acc, parsed.countMiss, (JSON.parse(modsStr) as { acronym: string }[]).map(m => m.acronym)),
+    Combo: 0,
+    MaximumStatistics: buildMaximumStatistics(parsed),
+    BeatmapHash: beatmap?.Hash ?? parsed.beatmapMD5,
+    IsLegacyScore: parsed.gameVersion < 30000000,
+    ClientVersion: parsed.parsedExtra?.client_version ?? '',
+    TotalScoreWithoutMods: totalScoreWithoutMods,
+    TotalScoreVersion: parsed.gameVersion < 30000000 ? 30000018 : parsed.gameVersion,
+    LegacyTotalScore: parsed.gameVersion < 30000000 ? parsed.totalScore : undefined,
+    BackgroundReprocessingFailed: false,
+    Pauses: parsed.parsedExtra?.pauses ?? [],
+  }
+}
+
 /**
  * Imports an .osr replay into the Realm database.
  * @param ctx - The osu!files context.
@@ -207,29 +287,13 @@ function accuracy(parsed: ParsedReplay): number {
  * importOsr(ctx, '/path/to/replay.osr') // ParsedReplay
  */
 export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrImportOptions): ParsedReplay {
-  const { requireBeatmap = false, suppressWarning = false, resolveUser = true } = options ?? {}
-
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for import')
+  assertWritable(ctx)
 
   const buffer = readFileSync(filePath)
   const parsed = parseOsrBuffer(buffer)
 
   const onlineId = parsed.parsedExtra?.online_id ?? 0
-  let userId = parsed.parsedExtra?.user_id ?? 0
-  let resolvedUser: RealmUser | undefined
-  if (resolveUser && (!userId || userId <= 0)) {
-    try {
-      const existing = [...ctx.realm.objects<Score>('Score').filtered(
-        'User.Username == $0 AND User.OnlineID > 1', parsed.playerName)]
-      if (existing.length > 0) {
-        const u = existing[0].User!
-        userId = u.OnlineID
-        resolvedUser = { OnlineID: u.OnlineID, Username: u.Username, CountryCode: u.CountryCode }
-      }
-    } catch {
-      // Realm JS may reject string params on some schemas.
-    }
-  }
   if (onlineId > 0) {
     const existing = ctx.scores.get.byOnlineIdExact(onlineId)[0]
     if (existing !== undefined) return parsed
@@ -239,98 +303,44 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
     if (existing.length > 0) return parsed
   }
 
-  const hash = sha256(buffer)
-  const storePath = fileStoragePath(ctx.filesFolderPath, hash)
-  if (!existsSync(storePath)) {
-    ensureParentDir(storePath)
-    writeFileSync(storePath, buffer)
-  }
+  const score = prepareScore(ctx, parsed, buffer, options, true)
+  const hash = score.Hash!
 
-  let beatmap: Beatmap | undefined
-  if (parsed.beatmapMD5) {
-    beatmap = ctx.beatmaps.get.byMd5Equals(parsed.beatmapMD5)[0]
-  }
-  if (!beatmap) {
-    if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
-    if (!suppressWarning) console.warn(`[osu-files] Beatmap '${parsed.beatmapMD5}' not found in realm, importing score without beatmap reference`)
-  }
+  const fileTransaction = ctx.fileStore?.beginTransaction()
+  const checkpoint = ctx.logger.checkpoint()
+  const previousTransaction = ctx.fileTransaction
+  ctx.fileTransaction = fileTransaction
 
-  const shortName = MODE_SHORTNAME[parsed.mode]
-  const ruleset = shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] : undefined
-
-  const totalHits = parsed.count300 + parsed.count100 + parsed.count50 + parsed.countMiss
-  const accuracy = totalHits > 0 ? (300 * parsed.count300 + 100 * parsed.count100 + 50 * parsed.count50) / (300 * totalHits) : 0
-
-  const scoreId = new Realm.BSON.UUID()
-
-  const modsStr = buildMods(parsed)
-  let { totalScore, totalScoreWithoutMods } = computeStandardisedScore(parsed, modsStr, ctx, beatmap, options)
-
-  // If realm already has a non-deleted score for the same beatmap+mods+accuracy,
-  // use its exact TotalScore
-  const beatmapHash = beatmap?.Hash ?? parsed.beatmapMD5
-  if (beatmapHash) {
-    const existing = [...ctx.realm.objects<Score>('Score').filtered(
-      'BeatmapHash == $0 AND Mods == $1 AND DeletePending == false AND IsLegacyScore == true',
-      beatmapHash, modsStr,
-    )]
-    let best: Score | undefined
-    for (const s of existing) {
-      if (Math.abs(s.Accuracy - accuracy) < 1e-9 && s.TotalScore > 0) {
-        if (!best || s.TotalScore > best.TotalScore) best = s
+  try {
+    writeRealm(ctx, () => {
+      fileTransaction?.put(buffer, hash)
+      fileTransaction?.commit()
+      if (!ctx.files.get.byHashEquals(hash)[0]) {
+        ctx.files.write.upsert({ Hash: hash })
       }
-    }
-    if (best) {
-      totalScore = best.TotalScore
-      totalScoreWithoutMods = best.TotalScoreWithoutMods
-    }
-  }
 
-  if (!ctx.files.get.byHashEquals(hash)[0]) {
-    ctx.files.write.upsert({ Hash: hash })
-  }
+      const fileObj = ctx.files.get.byHashEquals(hash)[0]
+      const files: RealmNamedFileUsage[] = fileObj ? [{ File: fileObj, Filename: 'replay.osr' }] : []
 
-  const fileObj = ctx.files.get.byHashEquals(hash)[0]
-  const files: RealmNamedFileUsage[] = fileObj ? [{ File: fileObj, Filename: 'replay.osr' }] : []
-  
-  ctx.scores.write.create({
-      ID: scoreId,
-      BeatmapInfo: beatmap,
-      Ruleset: ruleset,
-      DeletePending: false,
-      TotalScore: totalScore,
-      MaxCombo: parsed.maxCombo,
-      Accuracy: accuracy,
-      Date: parsed.timestamp,
-      PP: null,
-      OnlineID: onlineId > 0 ? onlineId : -1,
-      LegacyOnlineID: parsed.onlineScoreID > 0 ? parsed.onlineScoreID : -1,
-      User: resolvedUser ?? { OnlineID: userId > 0 ? userId : 1, Username: parsed.playerName },
-      Mods: modsStr,
-      Statistics: buildStatistics(parsed),
-      Rank: rankFromExtra(parsed.parsedExtra?.rank) ?? computeRank(accuracy, parsed.countMiss, (JSON.parse(modsStr) as { acronym: string }[]).map(m => m.acronym)),
-      Combo: 0,
-      MaximumStatistics: buildMaximumStatistics(parsed),
-      BeatmapHash: beatmap?.Hash ?? parsed.beatmapMD5,
-      IsLegacyScore: parsed.gameVersion < 30000000,
-      Hash: hash,
-      ClientVersion: parsed.parsedExtra?.client_version ?? '',
-      TotalScoreWithoutMods: totalScoreWithoutMods,
-      TotalScoreVersion: parsed.gameVersion < 30000000 ? 30000018 : parsed.gameVersion,
-      LegacyTotalScore: parsed.totalScore,
-      BackgroundReprocessingFailed: false,
-      Pauses: parsed.parsedExtra?.pauses ?? [],
-      Files: files,
+      ctx.scores.write.create({
+        ...score,
+        PP: null,
+        LegacyTotalScore: parsed.gameVersion < 30000000 ? parsed.totalScore : null,
+        Files: files,
+      })
     })
+  } catch (error) {
+    try { ctx.logger.discardSince(checkpoint) } finally { fileTransaction?.rollback() }
+    throw error
+  } finally {
+    ctx.fileTransaction = previousTransaction
+  }
 
   return parsed
 }
 
 /**
- * Parses an .osr replay file into a Score object without writing to the Realm database.
- * The returned Score includes computed fields (mods, statistics, rank, standardised score)
- * but has no Files array (no file storage write). Useful for inspection, preview, or
- * passing to {@link toBuffer} after persisting the Score to realm independently.
+ * Parses an .osr replay into a Score without writing to Realm or the file store.
  *
  * @param ctx - The osu!files context (used for beatmap/ruleset/user lookups).
  * @param filePath - Path to the .osr file.
@@ -350,77 +360,7 @@ export function parseOsr(
   filePath: string,
   options?: OsrImportOptions,
 ): Score {
-  const { requireBeatmap = false, suppressWarning = false, resolveUser = true } = options ?? {}
-
   const buffer = readFileSync(filePath)
   const parsed = parseOsrBuffer(buffer)
-
-  const onlineId = parsed.parsedExtra?.online_id ?? 0
-  let userId = parsed.parsedExtra?.user_id ?? 0
-  let resolvedUser: RealmUser | undefined
-  if (resolveUser && (!userId || userId <= 0)) {
-    try {
-      const existing = [...ctx.realm.objects<Score>('Score').filtered(
-        'User.Username == $0 AND User.OnlineID > 1', parsed.playerName)]
-      if (existing.length > 0) {
-        const u = existing[0].User!
-        userId = u.OnlineID
-        resolvedUser = { OnlineID: u.OnlineID, Username: u.Username, CountryCode: u.CountryCode }
-      }
-    } catch {
-      // Realm JS may reject string params on some schemas.
-    }
-  }
-
-  const hash = sha256(buffer)
-
-  let beatmap: Beatmap | undefined
-  if (parsed.beatmapMD5) {
-    beatmap = ctx.beatmaps.get.byMd5Equals(parsed.beatmapMD5)[0]
-  }
-  if (!beatmap) {
-    if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
-    if (!suppressWarning) console.warn(`[osu-files] Beatmap '${parsed.beatmapMD5}' not found in realm, importing score without beatmap reference`)
-  }
-
-  const shortName = MODE_SHORTNAME[parsed.mode]
-  const ruleset = shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] : undefined
-
-  const totalHits = parsed.count300 + parsed.count100 + parsed.count50 + parsed.countMiss
-  const acc = totalHits > 0 ? (300 * parsed.count300 + 100 * parsed.count100 + 50 * parsed.count50) / (300 * totalHits) : 0
-
-  const scoreId = new Realm.BSON.UUID()
-
-  const modsStr = buildMods(parsed)
-  const { totalScore, totalScoreWithoutMods } = computeStandardisedScore(parsed, modsStr, ctx, beatmap, options)
-
-  return {
-    ID: scoreId,
-    BeatmapInfo: beatmap,
-    Ruleset: ruleset,
-    Files: [],
-    Hash: hash,
-    DeletePending: false,
-    TotalScore: totalScore,
-    MaxCombo: parsed.maxCombo,
-    Accuracy: acc,
-    Date: parsed.timestamp,
-    PP: undefined,
-    OnlineID: onlineId > 0 ? onlineId : -1,
-    LegacyOnlineID: parsed.onlineScoreID > 0 ? parsed.onlineScoreID : -1,
-    User: resolvedUser ?? { OnlineID: userId > 0 ? userId : 1, Username: parsed.playerName },
-    Mods: modsStr,
-    Statistics: buildStatistics(parsed),
-    Rank: rankFromExtra(parsed.parsedExtra?.rank) ?? computeRank(acc, parsed.countMiss, (JSON.parse(modsStr) as { acronym: string }[]).map(m => m.acronym)),
-    Combo: 0,
-    MaximumStatistics: buildMaximumStatistics(parsed),
-    BeatmapHash: beatmap?.Hash ?? parsed.beatmapMD5,
-    IsLegacyScore: parsed.gameVersion < 30000000,
-    ClientVersion: parsed.parsedExtra?.client_version ?? '',
-    TotalScoreWithoutMods: totalScoreWithoutMods,
-    TotalScoreVersion: parsed.gameVersion < 30000000 ? 30000018 : parsed.gameVersion,
-    LegacyTotalScore: parsed.totalScore,
-    BackgroundReprocessingFailed: false,
-    Pauses: parsed.parsedExtra?.pauses ?? [],
-  }
+  return prepareScore(ctx, parsed, buffer, options)
 }

@@ -3,7 +3,8 @@ import type { OsuFilesContext } from '../context.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from '../osz/types.js'
 import type { BeatmapSet, Beatmap } from '../schema/types.js'
-import { MODE_TO_SHORTNAME, RULESETS, RULESET_INSTANTIATION } from '../ruleset-info.js'
+import { assertWritable, markChanged, writeRealm } from '../context.js'
+import { MODE_TO_SHORTNAME, RULESETS } from '../ruleset-info.js'
 
 function resolveRulesetByMode(ctx: OsuFilesContext, mode: number) {
   const shortName = MODE_TO_SHORTNAME[mode]
@@ -14,7 +15,7 @@ const STANDARD_RULESETS = RULESETS.map(r => ({
   ShortName: r.shortName,
   OnlineID: r.onlineID,
   Name: r.name,
-  InstantiationInfo: RULESET_INSTANTIATION[r.shortName],
+  InstantiationInfo: r.instantiationInfo,
   Available: true,
   LastAppliedDifficultyVersion: 0,
 }))
@@ -44,6 +45,7 @@ export type ImportSetInput = {
  * importSet(ctx, { onlineID: 123, setHash: 'abc', status: 0, protected: false, files: [...], beatmaps: [...] })
  */
 export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapSetData {
+  assertWritable(ctx)
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
@@ -51,6 +53,9 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   if (!existingSet && setHash) existingSet = ctx.sets.get.byHashEquals(setHash)[0] ?? null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
+  const previousBeatmaps = existingSet
+    ? [...existingSet.Beatmaps].map(b => ({ difficulty: b.DifficultyName ?? '', md5: b.MD5Hash ?? '' }))
+    : []
 
   for (const rs of STANDARD_RULESETS) {
     if (!ctx.rulesets.get.byShortNameEquals(rs.ShortName)[0]) {
@@ -60,7 +65,11 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
 
   if (existingSet) {
     for (const b of [...existingSet.Beatmaps]) {
-      if (b.Metadata) ctx.realm.write(() => ctx.realm.delete(b.Metadata!))
+      writeRealm(ctx, () => {
+        for (const score of ctx.realm.objects<any>('Score').filtered('BeatmapInfo.ID == $0', b.ID))
+          score.BeatmapInfo = null
+      })
+      if (b.Metadata) writeRealm(ctx, () => ctx.realm.delete(b.Metadata!))
       ctx.beatmaps.write.delete(b.ID)
     }
   }
@@ -105,7 +114,7 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
     if (!ruleset) continue
 
     let metadataObj: any
-    ctx.realm.write(() => {
+    writeRealm(ctx, () => {
       metadataObj = ctx.realm.create('BeatmapMetadata', {
         Title: meta.title || '',
         TitleUnicode: meta.titleUnicode || '',
@@ -165,11 +174,31 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
     createdBeatmaps.push(newBeatmap)
   }
 
-  ctx.realm.write(() => {
+  writeRealm(ctx, () => {
     for (const bm of createdBeatmaps) {
       beatmapSet.Beatmaps.push(bm)
     }
+
+    for (const previous of previousBeatmaps) {
+      if (!previous.md5) continue
+      const replacement = createdBeatmaps.find(b => b.DifficultyName === previous.difficulty)
+      if (!replacement) continue
+      for (const collection of ctx.realm.objects<any>('BeatmapCollection')) {
+        const hashes = [...collection.BeatmapMD5Hashes]
+        const index = hashes.indexOf(previous.md5)
+        if (index >= 0) {
+          hashes[index] = replacement.MD5Hash
+          collection.BeatmapMD5Hashes = hashes
+        }
+      }
+    }
+
+    for (const bm of createdBeatmaps) {
+      for (const score of ctx.realm.objects<any>('Score').filtered('BeatmapHash == $0', bm.Hash))
+        score.BeatmapInfo = bm
+    }
   })
+  markChanged(ctx)
 
   return {
     onlineID,

@@ -1,8 +1,9 @@
-import { createHash } from 'crypto'
+import { sha256 } from './util.js'
 
 type RealmFileLike = { Hash?: string }
 type NamedFileUsageLike = { File?: RealmFileLike; Filename?: string }
 
+/** A filename paired with a verified content hash or its content. */
 export class FileRef {
   filename: string
   hash?: string
@@ -35,12 +36,15 @@ export class FileRef {
     const content = source.content
 
     if (content && !hash) {
-      hash = createHash('sha256').update(content).digest('hex')
+      hash = sha256(content)
     }
 
     if (!hash) {
       throw new Error(`FileRef '${filename}' must specify hash or content`)
     }
+
+    if (!/^[a-f0-9]{64}$/.test(hash))
+      throw new Error(`FileRef '${filename}' has an invalid SHA-256 hash`)
 
     if (!content && ctx) {
       if (!ctx.files.get.byHashEquals(hash)[0]) {

@@ -108,11 +108,7 @@ export function parseOsu(content: string): OsuBeatmap {
     const line = raw.trim()
     if (!line) continue
 
-    if (currentSection && (currentSection === 'Events' || currentSection === 'TimingPoints' || currentSection === 'HitObjects')) {
-      if (line.startsWith('//')) continue
-    } else {
-      if (line.startsWith('//')) continue
-    }
+    if (line.startsWith('//')) continue
 
     const sectionMatch = line.match(SECTION_RE)
     if (sectionMatch) {
@@ -429,14 +425,14 @@ function parseSlider(base: HitObjectBase, extras: string): HitSlider {
   return { ...base, objectType: 'slider', extras: sliderExtras }
 }
 
-function parseSpinner(base: HitObjectBase, extras: string, timingOffset = 0): HitSpinner {
-  const parts = extras.split(',')
-  const tailParts = (parts[1] ?? '').split(':')
+function parseDuration(base: HitObjectBase, extras: string, objectType: 'spinner' | 'hold', timingOffset = 0): HitSpinner | HitHold {
+  const [endTime, tail = ''] = extras.split(',')
+  const tailParts = tail.split(':')
   return {
     ...base,
-    objectType: 'spinner',
+    objectType,
     extras: {
-      endTime: (parseInt(parts[0]) || 0) + timingOffset,
+      endTime: (parseInt(endTime) || 0) + timingOffset,
       sampleSet: tailParts[0] ? parseInt(tailParts[0]) : undefined,
       additionSet: tailParts[1] ? parseInt(tailParts[1]) : undefined,
       customIndex: tailParts[2] ? parseInt(tailParts[2]) : undefined,
@@ -446,19 +442,10 @@ function parseSpinner(base: HitObjectBase, extras: string, timingOffset = 0): Hi
   }
 }
 
+function parseSpinner(base: HitObjectBase, extras: string, timingOffset = 0): HitSpinner {
+  return parseDuration(base, extras, 'spinner', timingOffset) as HitSpinner
+}
+
 function parseHold(base: HitObjectBase, extras: string, timingOffset = 0): HitHold {
-  const parts = extras.split(',')
-  const tailParts = (parts[1] ?? '').split(':')
-  return {
-    ...base,
-    objectType: 'hold',
-    extras: {
-      endTime: (parseInt(parts[0]) || 0) + timingOffset,
-      sampleSet: tailParts[0] ? parseInt(tailParts[0]) : undefined,
-      additionSet: tailParts[1] ? parseInt(tailParts[1]) : undefined,
-      customIndex: tailParts[2] ? parseInt(tailParts[2]) : undefined,
-      sampleVolume: tailParts[3] ? parseInt(tailParts[3]) : undefined,
-      filename: tailParts[4] || undefined,
-    },
-  }
+  return parseDuration(base, extras, 'hold', timingOffset) as HitHold
 }

@@ -1,15 +1,12 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
-import { existsSync, mkdirSync, readFileSync, rmSync, mkdtempSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { createHash } from 'crypto'
 import { init } from '../src/index.js'
 import { parseOsr as parseOsrBinary, computeReplayMD5, parseReplayFrames, ticksToDate, dateToTicks } from '../src/osr/parse.js'
-import { toBuffer } from '../src/osr/export.js'
-import { parseOsr } from '../src/osr/import.js'
 import { LegacyMods, LegacyModsFlag, GameMode } from '../src/osr/types.js'
-import { nukeOldTestDirs } from './helpers.js'
 import type { Score } from '../src/schema/types.js'
 
 const SAMPLE_OSR = './tests/Cookiezi - Hommarju feat. Latte - masterpiece [Insane] (2013-11-10) Osu-1.osr'
@@ -156,7 +153,6 @@ describe('parseReplayFrames', () => {
 })
 
 describe('Import .osr', { timeout: 60000 }, () => {
-  nukeOldTestDirs()
   const tmpRoot = join(tmpdir(), `osu-files-test-osr-import-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
   const realmPath = join(tmpRoot, 'client.realm')
@@ -286,7 +282,6 @@ describe('Import .osr', { timeout: 60000 }, () => {
 })
 
 describe('parseOsr (no realm write)', { timeout: 60000 }, () => {
-  nukeOldTestDirs()
   const tmpRoot = join(tmpdir(), `osu-files-test-parseosr-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
   const realmPath = join(tmpRoot, 'client.realm')
@@ -351,7 +346,6 @@ describe('parseOsr (no realm write)', { timeout: 60000 }, () => {
 })
 
 describe('toBuffer (export without file write)', { timeout: 60000 }, () => {
-  nukeOldTestDirs()
   const tmpRoot = join(tmpdir(), `osu-files-test-tobuffer-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
   const realmPath = join(tmpRoot, 'client.realm')

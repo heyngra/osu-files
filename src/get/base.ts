@@ -1,4 +1,5 @@
 import Realm from 'realm'
+import { RealmClosedError } from '../realm-session.js'
 
 export abstract class EntityQuery<T> {
   private _preds: string[] = []
@@ -6,6 +7,7 @@ export abstract class EntityQuery<T> {
   private _sortField: string | null = null
   private _sortAscending = true
   private _cached: T[] | null = null
+  private _cachedGeneration = -1
 
   /** Cache the result after first terminal access. @default true */
   enableCache = true
@@ -98,12 +100,17 @@ export abstract class EntityQuery<T> {
   }
 
   private _eval(): T[] {
-    if (this.enableCache && this._cached !== null) return this._cached
+    if (this._realm.isClosed) throw new RealmClosedError()
+    const generation = realmGeneration(this._realm)
+    if (this.enableCache && this._cached !== null && this._cachedGeneration === generation) return this._cached
     let results = this._realm.objects<T>(this._name)
     if (this._preds.length > 0) results = results.filtered(this._preds.join(' AND '), ...this._args)
     if (this._sortField) results = results.sorted(this._sortField, this._sortAscending)
     const arr = [...results]
-    if (this.enableCache && this._preds.length > 0) this._cached = arr
+    if (this.enableCache && this._preds.length > 0) {
+      this._cached = arr
+      this._cachedGeneration = generation
+    }
     return arr
   }
 
@@ -120,4 +127,18 @@ export abstract class EntityQuery<T> {
     this._args.push(...vals)
     return this
   }
+}
+
+const generations = new WeakMap<object, { get: () => number; mark: () => void }>()
+
+export function registerRealmGeneration(realm: Realm, getGeneration: () => number, markGeneration: () => void): void {
+  generations.set(realm, { get: getGeneration, mark: markGeneration })
+}
+
+export function markRealmChanged(realm: Realm): void {
+  generations.get(realm)?.mark()
+}
+
+function realmGeneration(realm: Realm): number {
+  return generations.get(realm)?.get() ?? 0
 }

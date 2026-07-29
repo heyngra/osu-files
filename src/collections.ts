@@ -6,6 +6,7 @@ import { CollectionQuery } from './get/collections.get.js'
 import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { readLegacyCollectionDb, writeLegacyCollectionDb, type LegacyCollectionEntry } from './collections/legacy.js'
+import { assertWritable, markChanged, writeRealm } from './context.js'
 
 export type { LegacyCollectionEntry } from './collections/legacy.js'
 /**
@@ -31,11 +32,12 @@ export function createCollectionModule(ctx: OsuFilesContext) {
      * const { imported, merged } = db.collections.importLegacy('collection.db')
      */
     importLegacy(filePath: string): { imported: number; merged: number } {
+      assertWritable(ctx)
       const entries = readLegacyCollectionDb(readFileSync(filePath))
       let imported = 0
       let merged = 0
 
-      ctx.realm.write(() => {
+      writeRealm(ctx, () => {
         for (const entry of entries) {
           const existing = ctx.realm
             .objects<BeatmapCollection>('BeatmapCollection')
@@ -58,6 +60,7 @@ export function createCollectionModule(ctx: OsuFilesContext) {
           }
         }
       })
+      markChanged(ctx)
 
       return { imported, merged }
     },

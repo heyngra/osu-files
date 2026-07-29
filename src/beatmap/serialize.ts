@@ -1,7 +1,7 @@
 import type {
   OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,
-  OsuEvent, TimingPoint, OsuColour, HitObject, HitCircle, HitSlider,
-  HitSpinner, HitHold, SliderExtras, SliderCurveType, DurationHitObjectExtras,
+  OsuEvent, TimingPoint, OsuColour, HitObject, HitCircle,
+  HitSpinner, HitHold, SliderExtras, DurationHitObjectExtras,
 } from './types.js'
 import { serializeStoryboardForOsu } from './storyboard/serialize.js'
 
@@ -141,14 +141,8 @@ function serializeDurationExtrasTail(d: DurationHitObjectExtras): string {
   return `${d.sampleSet ?? 0}:${d.additionSet ?? 0}:${d.customIndex ?? 0}:${d.sampleVolume ?? 0}:${d.filename ?? ''}`
 }
 
-function serializeSpinnerExtras(h: HitSpinner): string {
-  const tail = serializeDurationExtrasTail(h.extras)
-  return `${h.extras.endTime},${tail}`
-}
-
-function serializeHoldExtras(h: HitHold): string {
-  const tail = serializeDurationExtrasTail(h.extras)
-  return `${h.extras.endTime},${tail}`
+function serializeDurationExtras(h: HitSpinner | HitHold): string {
+  return `${h.extras.endTime},${serializeDurationExtrasTail(h.extras)}`
 }
 
 function writeHitObject(obj: HitObject): string {
@@ -157,8 +151,8 @@ function writeHitObject(obj: HitObject): string {
   switch (obj.objectType) {
     case 'circle': return `${base},${serializeCircleExtras(obj)}`
     case 'slider': return `${base},${serializeSliderExtras(obj.extras)}`
-    case 'spinner': return `${base},${serializeSpinnerExtras(obj)}`
-    case 'hold': return `${base},${serializeHoldExtras(obj)}`
+    case 'spinner': return `${base},${serializeDurationExtras(obj)}`
+    case 'hold': return `${base},${serializeDurationExtras(obj)}`
   }
 }
 

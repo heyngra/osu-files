@@ -1,8 +1,3 @@
-import type { Skin } from './types.js'
-
-export type { Skin }
-export type { Skin as default }
-
 export const SkinSchema = {
   name: 'Skin',
   primaryKey: 'ID',

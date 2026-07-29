@@ -1,8 +1,3 @@
-import type { RulesetSetting } from './types.js'
-
-export type { RulesetSetting }
-export type { RulesetSetting as default }
-
 export const RulesetSettingSchema = {
   name: 'RulesetSetting',
   properties: {

@@ -7,7 +7,7 @@ import { createHash } from 'crypto'
 import { readZipEntries } from '../src/osz/import.js'
 import { init } from '../src/index.js'
 import { parseSkinIni } from '../src/skin/skin-ini.js'
-import { nukeOldTestDirs, SAMPLE_OSK } from './helpers.js'
+import { SAMPLE_OSK } from './helpers.js'
 
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex')
@@ -119,7 +119,6 @@ describe('parseSkinIni', () => {
 })
 
 describe('Import/Export .osk', { timeout: 60000 }, () => {
-  nukeOldTestDirs()
   const tmpRoot = join(tmpdir(), `osu-files-test-osk-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
   const realmPath = join(tmpRoot, 'client.realm')

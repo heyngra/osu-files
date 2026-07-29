@@ -4,14 +4,12 @@ import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { init, RollbackEntry } from '../src/index.js'
-import { nukeOldTestDirs } from './helpers.js'
 
 describe('Rollback — logging', { timeout: 60000 }, () => {
   const tmpRoot = join(tmpdir(), `osu-files-test-rollback-${Date.now()}`)
   const realmPath = join(tmpRoot, 'client.realm')
 
   before(() => {
-    nukeOldTestDirs()
     mkdirSync(tmpRoot, { recursive: true })
   })
   after(() => { try { rmSync(tmpRoot, { recursive: true, force: true }) } catch {} })
@@ -121,7 +119,6 @@ describe('Rollback — revert', { timeout: 60000 }, () => {
   const realmPath = join(tmpRoot, 'client.realm')
 
   before(() => {
-    nukeOldTestDirs()
     mkdirSync(tmpRoot, { recursive: true })
   })
   after(() => { try { rmSync(tmpRoot, { recursive: true, force: true }) } catch {} })
@@ -244,7 +241,6 @@ describe('RollbackEntry type', { timeout: 60000 }, () => {
   const realmPath = join(tmpRoot, 'client.realm')
 
   before(() => {
-    nukeOldTestDirs()
     mkdirSync(tmpRoot, { recursive: true })
   })
   after(() => { try { rmSync(tmpRoot, { recursive: true, force: true }) } catch {} })

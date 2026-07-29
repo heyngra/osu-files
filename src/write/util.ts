@@ -1,6 +1,5 @@
-import { existsSync } from 'fs'
 import type { OsuFilesContext } from '../context.js'
-import { fileStoragePath } from '../util.js'
+import { assertWritable, markChanged, writeRealm } from '../context.js'
 import { snapshot, LogAction } from './logger.js'
 import { ValidationError, required, unique, resolveRef } from './validate.js'
 
@@ -16,7 +15,7 @@ export type DeleteGuard = {
 }
 
 /** Configuration that drives CRUD operations for a single Realm entity type. */
-export type EntityConfig<T> = {
+export type EntityConfig = {
   /** Realm schema type name. @example 'Beatmap' */
   name: string
   /** Primary key field name. @example 'ID' | 'ShortName' | 'Hash' */
@@ -31,6 +30,8 @@ export type EntityConfig<T> = {
   fks?: Record<string, string>
   /** Fields to remove from input before passing to Realm.create(). */
   strip?: string[]
+  /** Defaults supplied for required primitive properties. */
+  defaults?: Record<string, unknown>
   /** Backlink checks run before delete. Delete throws if any match. */
   guards?: DeleteGuard[]
 }
@@ -46,15 +47,18 @@ export type EntityConfig<T> = {
  *   guards: [{ type: 'Score', filter: 'BeatmapInfo.ID == $0', label: 'Score' }],
  * })
  */
-export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
+export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig) {
   return {
     create(input: Record<string, unknown>): T {
+      assertWritable(ctx)
       for (const f of cfg.required ?? [])
         required(input[f], `${cfg.name}.${f}`)
       if (!cfg.pkOptional && input[cfg.pk] !== undefined && input[cfg.pk] !== null)
         unique(ctx.realm, cfg.name, cfg.pk, input[cfg.pk])
 
       const data: Record<string, unknown> = { ...input }
+      for (const [field, value] of Object.entries(cfg.defaults ?? {}))
+        if (data[field] === undefined) data[field] = value
       for (const f of cfg.strip ?? []) delete data[f]
       for (const [field, type] of Object.entries(cfg.fks ?? {}))
         if (field in input) data[field] = resolveRef(ctx.realm, type, input[field] as never)
@@ -62,19 +66,20 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
       if (ctx.checkHash && !ctx.filesFolderPath) throw new ValidationError(`Can't verify hash, no files folder set.`)
       
       if (ctx.checkHash && ctx.filesFolderPath && input.Hash) {
-        const fp = fileStoragePath(ctx.filesFolderPath, input.Hash as string)
-        if (!existsSync(fp))
-          throw new ValidationError(`File not found: ${fp}`)
+        if (!ctx.fileStore?.verify(input.Hash as string) && !ctx.fileTransaction?.has(input.Hash as string))
+          throw new ValidationError(`File not found or invalid: ${input.Hash}`)
       }
 
       let created: T
-      ctx.realm.write(() => { created = ctx.realm.create<T>(cfg.name, data as never) })
+      writeRealm(ctx, () => { created = ctx.realm.create<T>(cfg.name, data as never) })
+      markChanged(ctx)
       ctx.logger.log(cfg.name, LogAction.Create, String(input[cfg.pk] ?? '(nil)'), null, created!)
       return created!
     },
 
     /** Update an existing entity by PK. */
     update(id: unknown, patch: Record<string, unknown>): T {
+      assertWritable(ctx)
       const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, id as never)
       if (!existing) throw new ValidationError(`${cfg.name} '${id}' not found`)
 
@@ -85,22 +90,23 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
         if (field in patch) data[field] = resolveRef(ctx.realm, type, patch[field] as never)
 
       if (ctx.checkHash && ctx.filesFolderPath && patch.Hash) {
-        const fp = fileStoragePath(ctx.filesFolderPath, patch.Hash as string)
-        if (!existsSync(fp))
-          throw new ValidationError(`File not found: ${fp}`)
+        if (!ctx.fileStore?.verify(patch.Hash as string) && !ctx.fileTransaction?.has(patch.Hash as string))
+          throw new ValidationError(`File not found or invalid: ${patch.Hash}`)
       }
 
-      ctx.realm.write(() => {
+      writeRealm(ctx, () => {
         for (const key of Object.keys(data)) {
           if (key === cfg.pk) continue
           ;(existing as any)[key] = data[key]
         }
       })
+      markChanged(ctx)
       ctx.logger.log(cfg.name, LogAction.Update, id, before, snapshot(ctx.realm, cfg.name, id))
       return existing
     },
 
     delete(id: unknown): boolean {
+      assertWritable(ctx)
       const existing = ctx.realm.objectForPrimaryKey<T>(cfg.name, id as never)
       if (!existing) return false
 
@@ -111,7 +117,8 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig<T>) {
       }
 
       const before = snapshot(ctx.realm, cfg.name, id)
-      ctx.realm.write(() => { ctx.realm.delete(existing as never) })
+      writeRealm(ctx, () => { ctx.realm.delete(existing as never) })
+      markChanged(ctx)
       ctx.logger.log(cfg.name, LogAction.Delete, id, before, null)
       return true
     },

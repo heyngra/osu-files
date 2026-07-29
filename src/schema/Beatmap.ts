@@ -1,8 +1,3 @@
-import type { Beatmap } from './types.js'
-
-export type { Beatmap }
-export type { Beatmap as default }
-
 export const BeatmapSchema = {
   name: 'Beatmap',
   primaryKey: 'ID',

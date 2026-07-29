@@ -103,11 +103,10 @@ function parseBool(value: string): boolean | undefined {
   return undefined
 }
 
-/**
- * Parses a skin.ini file into structured data.
+/** Parses skin.ini text into typed sections and values.
  * @returns Parsed skin.ini data.
  * @example
- * parseSkinIni(fs.readFileSync('skin.ini', 'utf-8'))
+ * const ini = parseSkinIni(fs.readFileSync('skin.ini', 'utf-8'))
  */
 export function parseSkinIni(content: string): SkinIni {
   const raw: Record<string, Record<string, string>> = {}

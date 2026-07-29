@@ -1,7 +1,6 @@
-import { Anchor, Easing, CommandType } from './types.js'
+import { Anchor, CommandType } from './types.js'
 import {
   StoryboardCommandGroup, StoryboardCommand,
-  StoryboardLoopingGroup, StoryboardTriggerGroup,
 } from './commands.js'
 import { StoryboardSprite, StoryboardAnimation, StoryboardSample } from './elements.js'
 import { Storyboard } from './storyboard.js'

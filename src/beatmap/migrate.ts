@@ -1,6 +1,8 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
+import { markChanged, writeRealm } from '../context.js'
+import type { FileStoreTransaction } from '../file-store.js'
 import { FileRef } from '../types.js'
 import type { BeatmapSet, RealmNamedFileUsage } from '../schema/types.js'
 import { parseOsu } from './parse.js'
@@ -12,8 +14,13 @@ import { serializeOsb } from './storyboard/serialize.js'
 import { Storyboard } from './storyboard/storyboard.js'
 import { StoryboardSprite, StoryboardSample } from './storyboard/elements.js'
 import type { StoryboardElementSource } from './storyboard/types.js'
-import { sha256, fileStoragePath, ensureParentDir, normalizeFilename } from '../util.js'
+import { md5, sha256, fileStoragePath, normalizeFilename } from '../util.js'
+import { assertWritable } from '../context.js'
 
+/** Creates a validated file reference from a hash or in-memory content.
+ * @example
+ * const ref = createFileRef('audio.mp3', { content: buffer })
+ */
 export function createFileRef(
   filename: string,
   source: { hash?: string; content?: Buffer },
@@ -89,7 +96,7 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
         if (parsed.storyboard) {
           mergeOsbContent(parsed.storyboard, osbSb, 'shared')
         } else {
-          for (const [name, layer] of osbSb.layers) {
+          for (const layer of osbSb.layers.values()) {
             for (const el of layer.elements) {
               if (el instanceof StoryboardSprite || el instanceof StoryboardSample) {
                 el.source = 'shared'
@@ -163,11 +170,8 @@ function autoRegisterFileRefs(ctx: OsuFilesContext, setFiles: RealmNamedFileUsag
     let hash = ref.hash
     if (ref.content) {
       hash = sha256(ref.content)
-      const storePath = fileStoragePath(ctx.filesFolderPath!, hash)
-      if (!existsSync(storePath)) {
-        ensureParentDir(storePath)
-        writeFileSync(storePath, ref.content)
-      }
+      if (!ctx.fileStore?.verify(hash) && !ctx.fileTransaction?.has(hash))
+        ctx.fileTransaction?.put(ref.content, hash) ?? ctx.fileStore?.put(ref.content, hash)
       if (!ctx.files.get.byHashEquals(hash)[0]) {
         ctx.files.write.upsert({ Hash: hash })
       }
@@ -182,7 +186,7 @@ function autoRegisterFileRefs(ctx: OsuFilesContext, setFiles: RealmNamedFileUsag
         fileObj = ctx.files.write.upsert({ Hash: hash })
       }
       if (fileObj) {
-        ctx.realm.write(() => {
+        writeRealm(ctx, () => {
           setFiles.push({ File: fileObj, Filename: ref.filename })
         })
       }
@@ -196,7 +200,28 @@ function autoRegisterFileRefs(ctx: OsuFilesContext, setFiles: RealmNamedFileUsag
  *  @returns true if the hash changed (file written), false if unchanged.
  */
 export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modified: OsuBeatmap): boolean {
+  assertWritable(ctx)
+  const transaction = ctx.fileStore?.beginTransaction()
+  const checkpoint = ctx.logger.checkpoint()
+  const previousTransaction = ctx.fileTransaction
+  ctx.fileTransaction = transaction
+  try {
+    return writeRealm(ctx, () => {
+      const result = saveOsuBeatmapInternal(ctx, beatmapIdStr, modified, transaction)
+      transaction?.commit()
+      return result
+    })
+  } catch (error) {
+    try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
+    throw error
+  } finally {
+    ctx.fileTransaction = previousTransaction
+  }
+}
+
+function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modified: OsuBeatmap, transaction?: FileStoreTransaction): boolean {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required to save')
+  assertWritable(ctx)
 
   const beatmapId = new Realm.BSON.UUID(beatmapIdStr)
   const beatmap = ctx.beatmaps.get.byId(beatmapId)[0]
@@ -219,21 +244,22 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
 
   const oldHash = beatmap.Hash ?? ''
   const newContent = serializeOsu(modified)
-  const newHash = sha256(Buffer.from(newContent, 'utf-8'))
+  const newBuffer = Buffer.from(newContent, 'utf-8')
+  const newHash = sha256(newBuffer)
+  const newMd5Hash = md5(newBuffer)
 
   if (newHash === oldHash) return false
 
-  const storePath = fileStoragePath(ctx.filesFolderPath, newHash)
-  ensureParentDir(storePath)
-  writeFileSync(storePath, newContent, 'utf-8')
+  transaction?.put(newBuffer, newHash) ?? ctx.fileStore?.put(newBuffer, newHash)
 
   if (!ctx.files.get.byHashEquals(newHash)[0]) {
     ctx.files.write.upsert({ Hash: newHash })
   }
 
-  ctx.beatmaps.write.update(beatmapId, { Hash: newHash })
+  const oldMd5Hash = beatmap.MD5Hash ?? ''
+  ctx.beatmaps.write.update(beatmapId, { Hash: newHash, MD5Hash: newMd5Hash })
 
-  ctx.realm.write(() => {
+  writeRealm(ctx, () => {
     beatmap.DifficultyName = modified.metadata.version
     beatmap.OnlineID = modified.metadata.beatmapID
     if (beatmap.Metadata) {
@@ -251,6 +277,22 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
       }
     }
     if (beatmap.BeatmapSet) beatmap.BeatmapSet.OnlineID = modified.metadata.beatmapSetID
+    beatmap.Status = -4
+    beatmap.LastLocalUpdate = new Date()
+
+    for (const collection of ctx.realm.objects<any>('BeatmapCollection')) {
+      const hashes = [...collection.BeatmapMD5Hashes]
+      const index = hashes.indexOf(oldMd5Hash)
+      if (index >= 0) {
+        hashes[index] = newMd5Hash
+        collection.BeatmapMD5Hashes = hashes
+      }
+    }
+
+    for (const score of ctx.realm.objects<any>('Score')) {
+      if (score.BeatmapInfo?.ID === beatmap.ID) score.BeatmapInfo = null
+      if (score.BeatmapHash === newHash) score.BeatmapInfo = beatmap
+    }
   })
 
   const freshBeatmap = ctx.beatmaps.get.byId(beatmapId)[0]
@@ -268,7 +310,7 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
       const usage = setFiles.find(fu => fu.File?.Hash === oldHash)
         ?? setFiles.find((fu: any) => fu.Filename === filename)
       if (usage) {
-        ctx.realm.write(() => { usage.File = ctx.files.get.byHashEquals(newHash)[0] })
+        writeRealm(ctx, () => { usage.File = ctx.files.get.byHashEquals(newHash)[0] })
       }
 
       if (modified.storyboard && modified.storyboard._dirty) {
@@ -297,8 +339,7 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
           const osbHash = sha256(Buffer.from(osbContent, 'utf-8'))
           const osbPath = fileStoragePath(ctx.filesFolderPath, osbHash)
           if (!existsSync(osbPath)) {
-            ensureParentDir(osbPath)
-            writeFileSync(osbPath, osbContent, 'utf-8')
+            transaction?.put(Buffer.from(osbContent, 'utf-8'), osbHash) ?? ctx.fileStore?.put(Buffer.from(osbContent, 'utf-8'), osbHash)
           }
           if (!ctx.files.get.byHashEquals(osbHash)[0]) {
             ctx.files.write.upsert({ Hash: osbHash })
@@ -306,9 +347,9 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
           const osbFile = ctx.files.get.byHashEquals(osbHash)[0]
           const usage = setFiles.find(f => f.Filename === osbFilename)
           if (usage) {
-            ctx.realm.write(() => { usage.File = osbFile })
+            writeRealm(ctx, () => { usage.File = osbFile })
           } else if (osbFile) {
-            ctx.realm.write(() => {
+            writeRealm(ctx, () => {
               setFiles.push({ File: osbFile, Filename: osbFilename })
             })
           }
@@ -322,7 +363,7 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
           try {
             const bp = fileStoragePath(ctx.filesFolderPath, h)
             const usage = setFiles.find(f => f.File?.Hash === h)
-            allBeatmapFiles.push({ filename: usage?.Filename ?? h, buffer: readFileSync(bp) })
+            allBeatmapFiles.push({ filename: usage?.Filename ?? h, buffer: transaction?.read(h) ?? readFileSync(bp) })
           } catch {}
         }
       }
@@ -333,6 +374,8 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
       }
     }
   }
+
+  markChanged(ctx)
 
   return true
 }

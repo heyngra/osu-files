@@ -58,14 +58,6 @@ export type LegacyBeatmapConversionDifficultyInfo = {
 
 type BonusAccum = { legacy: number; standardised: number }
 
-function getClockRate(modAcronyms: string[]): number {
-  for (const mod of modAcronyms) {
-    if (mod === 'DT' || mod === 'NC') return 1.5
-    if (mod === 'HT' || mod === 'DC') return 0.75
-  }
-  return 1
-}
-
 // C# uses decimal (28-digit) to emulate x87 80-bit FPU.
 // See: https://github.com/ppy/osu/commit/7c9adc7ad3
 function difficultyPeppyStars(diff: LegacyBeatmapDifficulty, objectCount: number, drainLength: number): number {
@@ -96,7 +88,6 @@ function simulateSlider(
   combo: number,
   startTime: number,
   timingPoints: TimingPoint[],
-  clockRate: number,
   fileFormat: number,
 ): number {
   const { pixelLength, repeats } = obj.extras
@@ -126,7 +117,7 @@ function simulateSlider(
   const raw = Math.abs(-100 / velocityMultiplier)
   const clamped = Math.max(10, Math.min(1000, raw))
   const bpmMult = clamped / 100
-  // C# Slider.Velocity is BASE_SCORING_DISTANCE * SM / adjustedBeatLength — no clockRate.
+  // C# Slider.Velocity is BASE_SCORING_DISTANCE * SM / adjustedBeatLength; no clockRate.
   // The C# OsuLegacyScoreSimulator does not multiply by clockRate either.
   const velocity = 100 * diff.SliderMultiplier / (beatLength * bpmMult)
 
@@ -205,7 +196,7 @@ function simulateSpinner(
 export function computeLegacyScoreAttributes(
   beatmap: OsuBeatmap,
   diff: LegacyBeatmapDifficulty,
-  modAcronyms: string[],
+  _modAcronyms: string[],
 ): LegacyScoreAttributes {
   let countNormal = 0, countSlider = 0, countSpinner = 0
   for (const obj of beatmap.hitObjects) {
@@ -232,8 +223,6 @@ export function computeLegacyScoreAttributes(
   }
 
   const sm = difficultyPeppyStars(diff, objectCount, drainLength)
-  const clockRate = getClockRate(modAcronyms)
-
   const attrs: LegacyScoreAttributes = { AccuracyScore: 0, ComboScore: 0, BonusScoreRatio: 0, BonusScore: 0, MaxCombo: 0, ScoreMultiplier: sm }
   const bonus: BonusAccum = { legacy: 0, standardised: 0 }
   let combo = 0
@@ -245,7 +234,7 @@ export function computeLegacyScoreAttributes(
         combo++
         break
       case 'slider':
-        combo = simulateSlider(obj as HitSlider, attrs, sm, diff, combo, obj.time, beatmap.timingPoints, clockRate, beatmap.fileFormat)
+        combo = simulateSlider(obj as HitSlider, attrs, sm, diff, combo, obj.time, beatmap.timingPoints, beatmap.fileFormat)
         break
       case 'spinner':
         combo = simulateSpinner(obj as HitSpinner, attrs, sm, combo, bonus)

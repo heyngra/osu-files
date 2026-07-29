@@ -3,6 +3,7 @@ import type { OsuFilesContext } from './context.js'
 import type { RulesetShortName } from './keybindings/types.js'
 import { RulesetSettingQuery } from './get/rulesetsettings.get.js'
 import { LogAction } from './write/logger.js'
+import { assertWritable, markChanged, writeRealm } from './context.js'
 
 function serializeSetting(s: RulesetSetting): Record<string, unknown> {
   return { RulesetName: s.RulesetName, Variant: s.Variant, Key: s.Key, Value: s.Value }
@@ -24,28 +25,33 @@ export function createRulesetSettingModule(ctx: OsuFilesContext) {
   }
 
   function setSetting(rulesetName: RulesetShortName, key: string, value: string, variant = 0): void {
+    assertWritable(ctx)
     const settingKey = `${rulesetName}/${variant}/${key}`
     const existing = findSetting(rulesetName, variant, key)
     if (existing) {
       const before = serializeSetting(existing)
-      ctx.realm.write(() => { existing.Value = value })
+      writeRealm(ctx, () => { existing.Value = value })
+      markChanged(ctx)
       ctx.logger.log('RulesetSetting', LogAction.Update, settingKey, before, serializeSetting(existing))
     } else {
-      ctx.realm.write(() => {
+      writeRealm(ctx, () => {
         ctx.realm.create<RulesetSetting>('RulesetSetting', {
           RulesetName: rulesetName, Variant: variant, Key: key, Value: value,
         })
       })
+      markChanged(ctx)
       ctx.logger.log('RulesetSetting', LogAction.Create, settingKey, null, { RulesetName: rulesetName, Variant: variant, Key: key, Value: value })
     }
   }
 
   function removeSetting(rulesetName: RulesetShortName, key: string, variant = 0): void {
+    assertWritable(ctx)
     const settingKey = `${rulesetName}/${variant}/${key}`
     const existing = findSetting(rulesetName, variant, key)
     if (existing) {
       const before = serializeSetting(existing)
-      ctx.realm.write(() => { ctx.realm.delete(existing) })
+      writeRealm(ctx, () => { ctx.realm.delete(existing) })
+      markChanged(ctx)
       ctx.logger.log('RulesetSetting', LogAction.Delete, settingKey, before, null)
     }
   }

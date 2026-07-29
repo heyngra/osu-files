@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs'
+import { buffer } from 'node:stream/consumers'
 import { ZipFile } from 'yazl'
 import type { Skin } from '../schema/types.js'
 import { fileStoragePath } from '../util.js'
@@ -22,11 +23,6 @@ export async function exportOskData(skin: Skin, filesFolderPath: string): Promis
     zip.addBuffer(content, filename)
   }
 
-  const chunks: Buffer[] = []
-  zip.outputStream.on('data', (chunk: Buffer) => chunks.push(chunk))
   zip.end()
-  return new Promise((resolve, reject) => {
-    zip.outputStream.on('end', () => resolve(Buffer.concat(chunks)))
-    zip.outputStream.on('error', reject)
-  })
+  return Buffer.from(await buffer(zip.outputStream))
 }

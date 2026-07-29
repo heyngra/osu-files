@@ -1,8 +1,3 @@
-import type { BeatmapDifficulty } from './types.js'
-
-export type { BeatmapDifficulty }
-export type { BeatmapDifficulty as default }
-
 export const BeatmapDifficultySchema = {
   name: 'BeatmapDifficulty',
   embedded: true,

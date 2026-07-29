@@ -1,5 +1,5 @@
 import { StoryboardLayer } from './layer.js'
-import { StoryboardSprite, StoryboardSample } from './elements.js'
+import { StoryboardSprite } from './elements.js'
 import type { StoryboardLayerName } from './types.js'
 
 const DEFAULT_DEPTHS: Record<string, number> = {
@@ -64,15 +64,8 @@ export class Storyboard {
     let t: number | undefined
     for (const layer of this.layers.values()) {
       for (const el of layer.elements) {
-        if (el instanceof StoryboardSprite) {
-          const st = el.commands.startTime
-          if (st !== undefined && (t === undefined || st < t)) t = st
-          for (const g of el.loopingGroups) { const gt = g.startTime; if (gt !== undefined && (t === undefined || gt < t)) t = gt }
-          for (const g of el.triggerGroups) { const gt = g.startTime; if (gt !== undefined && (t === undefined || gt < t)) t = gt }
-        }
-        if (el instanceof StoryboardSample) {
-          if (t === undefined || el.startTime < t) t = el.startTime
-        }
+        const time = el.startTime
+        if (time !== undefined && (t === undefined || time < t)) t = time
       }
     }
     return t
@@ -82,13 +75,8 @@ export class Storyboard {
     let t: number | undefined
     for (const layer of this.layers.values()) {
       for (const el of layer.elements) {
-        if (el instanceof StoryboardSprite) {
-          const et = el.commands.endTime
-          if (et !== undefined && (t === undefined || et > t)) t = et
-          for (const g of el.loopingGroups) { const gend = g.endTime; if (gend !== undefined && (t === undefined || gend > t)) t = gend }
-          for (const g of el.triggerGroups) { const gend = g.endTime; if (gend !== undefined && (t === undefined || gend > t)) t = gend }
-        }
-        if (el instanceof StoryboardSample && (t === undefined || el.startTime > t)) t = el.startTime
+        const time = el instanceof StoryboardSprite ? el.endTime : el.startTime
+        if (time !== undefined && (t === undefined || time > t)) t = time
       }
     }
     return t

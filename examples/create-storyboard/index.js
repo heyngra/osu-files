@@ -1,21 +1,10 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import init, { Storyboard, StoryboardSprite, Anchor, Easing } from 'osu-files'
 import readline from 'node:readline/promises'
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const ask = (q) => rl.question(q).then(a => a.replace(/^["']|["']$/g, '').trim())
-
-const sha256 = (b) => createHash('sha256').update(b).digest('hex')
-
-function ensureFile(filesPath, content) {
-  const hash = sha256(content)
-  const p = join(filesPath, hash[0], hash.substring(0, 2), hash)
-  mkdirSync(dirname(p), { recursive: true })
-  if (!existsSync(p)) writeFileSync(p, content)
-  return hash
-}
 
 ;(async () => {
   const realmPath = await ask("osu!lazer client.realm: ")
@@ -30,9 +19,9 @@ function ensureFile(filesPath, content) {
     ]
     const [bgBuf, logoBuf, spBuf] = [readFileSync(bgPath), readFileSync(logoPath), readFileSync(spPath)]
     const images = [
-      { filename: bgPath.split(/[\\/]/).pop(), content: bgBuf, hash: ensureFile(filesPath, bgBuf) },
-      { filename: logoPath.split(/[\\/]/).pop(), content: logoBuf, hash: ensureFile(filesPath, logoBuf) },
-      { filename: spPath.split(/[\\/]/).pop(), content: spBuf, hash: ensureFile(filesPath, spBuf) },
+      { filename: bgPath.split(/[\\/]/).pop(), content: bgBuf, hash: osu.files.put(bgBuf).hash },
+      { filename: logoPath.split(/[\\/]/).pop(), content: logoBuf, hash: osu.files.put(logoBuf).hash },
+      { filename: spPath.split(/[\\/]/).pop(), content: spBuf, hash: osu.files.put(spBuf).hash },
     ]
 
     const sb = new Storyboard()
@@ -66,7 +55,7 @@ function ensureFile(filesPath, content) {
     }
 
     const osuContent = osu.beatmap.serialize(beatmap)
-    const osuHash = ensureFile(filesPath, Buffer.from(osuContent))
+    const osuHash = osu.files.put(Buffer.from(osuContent)).hash
 
     const setHash = sha256(Buffer.from(osuContent))
     const allFiles = [{ hash: osuHash, filename: osuFile }, ...images.map(i => ({ hash: i.hash, filename: i.filename }))]

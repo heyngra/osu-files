@@ -1,7 +1,8 @@
-import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync } from 'fs'
 import type { OsuFilesContext } from '../context.js'
 import type { Score } from '../schema/types.js'
 import { fileStoragePath } from '../util.js'
+import { writeFileAtomic } from '../util.js'
 import { dateToTicks, writeString, parseOsr, computeReplayMD5 } from './parse.js'
 import { SHORTNAME_TO_MODE, MOD_ACRONYM_TO_FLAG } from './types.js'
 
@@ -54,7 +55,7 @@ export function exportOsr(ctx: OsuFilesContext, scoreId: string, outputPath: str
   const score = ctx.scores.get.byId(scoreId)[0]
   if (!score) throw new Error(`Score '${scoreId}' not found`)
 
-  writeFileSync(outputPath, toBuffer(ctx, score))
+  writeFileAtomic(outputPath, toBuffer(ctx, score))
 }
 
 /**

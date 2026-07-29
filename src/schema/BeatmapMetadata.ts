@@ -1,8 +1,3 @@
-import type { BeatmapMetadata } from './types.js'
-
-export type { BeatmapMetadata }
-export type { BeatmapMetadata as default }
-
 export const BeatmapMetadataSchema = {
   name: 'BeatmapMetadata',
   properties: {

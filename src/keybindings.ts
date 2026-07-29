@@ -15,7 +15,7 @@ import { resolveAction, validateKeyCombo } from './keybindings/keys.js'
 /**
  * Creates the key binding sub-module with query and write operations.
  * @example
- * const kb = db.keyBindings.get.byRulesetNameEquals('osu')[0]
+ * const kb = db.keybindings.get.byRulesetNameEquals('osu')[0]
  */
 export function createKeyBindingModule(ctx: OsuFilesContext) {
   const q = new KeyBindingQuery(ctx.realm)

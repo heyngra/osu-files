@@ -1,21 +1,22 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
-import { existsSync, readFileSync, rmSync, mkdtempSync } from 'fs'
+import { createWriteStream, existsSync, readFileSync, rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { createHash } from 'crypto'
 import { readZipEntries } from '../src/osz/import.js'
+import { ZipFile } from 'yazl'
 import { init } from '../src/index.js'
 import { parseOsu } from '../src/beatmap/parse.js'
 import { serializeOsu } from '../src/beatmap/serialize.js'
-import { nukeOldTestDirs, SAMPLE_OSZ } from './helpers.js'
+import { SAMPLE_OSZ } from './helpers.js'
+import { fileStoragePath } from '../src/util.js'
 
 function sha256(buf: Buffer): string {
   return createHash('sha256').update(buf).digest('hex')
 }
 
 function tmp() {
-  nukeOldTestDirs()
   const root = mkdtempSync(join(tmpdir(), 'osu-files-test-'))
   const filesPath = join(root, 'files')
   const realmPath = join(root, 'client.realm')
@@ -143,6 +144,13 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
 
       const refreshedSet = osu.sets.get[0]
       assert.notStrictEqual(refreshedSet.Hash, origSetHash)
+      const setFiles = [...refreshedSet.Beatmaps]
+        .map(beatmap => {
+          const usage = refreshedSet.Files.find(file => file.File?.Hash === beatmap.Hash)
+          return { filename: usage?.Filename ?? beatmap.Hash ?? '', content: readFileSync(fileStoragePath(filesPath, beatmap.Hash!)) }
+        })
+        .sort((a, b) => a.filename.localeCompare(b.filename))
+      assert.strictEqual(refreshedSet.Hash, sha256(Buffer.concat(setFiles.map(file => file.content))))
       const usage = refreshedSet.Files.find(f => f.Filename?.includes('Collab Insane'))
       assert.strictEqual(usage?.File?.Hash, refreshed.Hash)
 
@@ -180,6 +188,27 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
       assert.notStrictEqual(refreshed.Hash, originalHash)
     } finally {
       try { rmSync(root, { recursive: true, force: true }) } catch {}
+    }
+  })
+
+  it('rejects case-insensitive duplicate archive filenames', async () => {
+    const { root } = tmp()
+    const archivePath = join(root, 'duplicate.osz')
+    const zip = new ZipFile()
+    const output = createWriteStream(archivePath)
+    zip.outputStream.pipe(output)
+    zip.addBuffer(Buffer.from('first'), 'song.osu')
+    zip.addBuffer(Buffer.from('second'), 'SONG.OSU')
+    zip.end()
+    await new Promise<void>((resolve, reject) => {
+      output.on('finish', resolve)
+      output.on('error', reject)
+    })
+
+    try {
+      await assert.rejects(readZipEntries(archivePath), /duplicate filename/i)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
     }
   })
 

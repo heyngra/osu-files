@@ -1,16 +1,14 @@
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { writeFileSync, readdirSync, unlinkSync, statSync, existsSync, mkdirSync } from 'fs'
+import { accessSync, constants, writeFileSync, readdirSync, unlinkSync, statSync, existsSync, mkdirSync } from 'fs'
 import Realm from 'realm'
+import { markRealmChanged } from '../get/base.js'
 
 /** Log action types for change tracking. */
 export enum LogAction {
   Create = 'create',
   Update = 'update',
   Delete = 'delete',
-  SoftDelete = 'soft-delete',
-  Undelete = 'undelete',
-  Duplicate = 'duplicate',
 }
 
 /**
@@ -131,11 +129,14 @@ export class RollbackLogger {
 
   get entries(): readonly RollbackEntry[] { return this.entryList }
 
+  /** Marks the current end of the rollback log for an operation. */
+  checkpoint(): number {
+    return this.entryList.length
+  }
+
   private checkWritable(): boolean {
     try {
-      const test = join(tmpdir(), `.osu-files-test-${process.pid}`)
-      writeFileSync(test, '', 'utf-8')
-      unlinkSync(test)
+      accessSync(tmpdir(), constants.W_OK)
       return true
     } catch {
       console.warn('[osu-files] Temp directory not writable, rollback disabled')
@@ -230,6 +231,25 @@ export class RollbackLogger {
     return toRevert.length
   }
 
+  /** Rolls back entries created after a checkpoint. */
+  rollbackSince(checkpoint: number): number {
+    const toRevert = this.takeSince(checkpoint)
+    for (let i = toRevert.length - 1; i >= 0; i--) this.applyRevert(toRevert[i])
+    return toRevert.length
+  }
+
+  /** Discards entries created after a failed Realm transaction. */
+  discardSince(checkpoint: number): number {
+    return this.takeSince(checkpoint).length
+  }
+
+  private takeSince(checkpoint: number): RollbackEntry[] {
+    const index = Math.max(0, Math.min(checkpoint, this.entryList.length))
+    const entries = this.entryList.splice(index)
+    this.entrySize -= entries.reduce((size, entry) => size + JSON.stringify(entry).length, 0)
+    return entries
+  }
+
   private applyRevert(entry: RollbackEntry): void {
     const cfg = this.resolveConfig(entry.entity)
     if (!cfg) return
@@ -270,6 +290,7 @@ export class RollbackLogger {
         }
       }
     })
+    markRealmChanged(this.realm)
   }
 
   private entryPrimaryKey(entry: RollbackEntry): string | number | Realm.BSON.UUID {

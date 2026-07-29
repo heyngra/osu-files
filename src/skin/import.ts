@@ -1,8 +1,8 @@
-import { existsSync, writeFileSync } from 'fs'
-import type { Skin } from '../schema/types.js'
 import { readZipEntries } from '../osz/import.js'
-import { sha256, fileStoragePath, ensureParentDir, detectCommonPrefix, stripPrefix, computeHash } from '../util.js'
+import { sha256, detectCommonPrefix, stripPrefix, computeHash } from '../util.js'
 import { parseSkinIni } from './skin-ini.js'
+import { createFileStore, type FileStore, type FileStoreTransaction } from '../file-store.js'
+import type { ArchiveLimits } from '../osz/import.js'
 
 const HASHABLE_SKIN_EXTS = ['.ini', '.json']
 
@@ -31,8 +31,8 @@ export type ImportSkinEntries = {
  * @example
  * importOskEntries('/path/to/skin.osk', filesFolderPath) // { entries: [...], skinHash: '...', name: 'My Skin', ... }
  */
-export async function importOskEntries(filePath: string, filesFolderPath: string): Promise<ImportSkinEntries> {
-  const entries = await readZipEntries(filePath)
+export async function importOskEntries(filePath: string, filesFolderPath: string, fileStore?: FileStore, limits?: ArchiveLimits, transaction?: FileStoreTransaction): Promise<ImportSkinEntries> {
+  const entries = await readZipEntries(filePath, limits)
   if (entries.length === 0) throw new Error('Empty archive')
 
   const archiveName = filePath.replace(/\\/g, '/').split('/').pop()?.replace(/\.osk$/i, '') ?? 'No name'
@@ -43,13 +43,10 @@ export async function importOskEntries(filePath: string, filesFolderPath: string
     buffer: e.buffer,
     hash: sha256(e.buffer),
   }))
+  const store = fileStore ?? createFileStore(filesFolderPath)
 
   for (const entry of processed) {
-    const storePath = fileStoragePath(filesFolderPath, entry.hash)
-    if (!existsSync(storePath)) {
-      ensureParentDir(storePath)
-      writeFileSync(storePath, entry.buffer)
-    }
+    transaction?.put(entry.buffer, entry.hash) ?? store?.put(entry.buffer, entry.hash)
   }
 
   const skinHash = computeHash(processed, HASHABLE_SKIN_EXTS)

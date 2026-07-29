@@ -1,8 +1,3 @@
-import type { ModPreset } from './types.js'
-
-export type { ModPreset }
-export type { ModPreset as default }
-
 export const ModPresetSchema = {
   name: 'ModPreset',
   primaryKey: 'ID',

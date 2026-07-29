@@ -170,9 +170,7 @@ export type RealmNamedFileUsage = {
 }
 
 /** A file record in Realm, keyed by SHA-256 hash. */
-export type RealmFile = {
-  Hash?: string
-}
+export type RealmFile = File
 
 /** An osu! user known to the local Realm. */
 export type RealmUser = {

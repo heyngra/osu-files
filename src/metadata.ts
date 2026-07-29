@@ -1,4 +1,3 @@
-import type { BeatmapMetadata } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { MetadataQuery } from './get/metadata.get.js'
 

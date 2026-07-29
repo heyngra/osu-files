@@ -7,7 +7,7 @@ import { getConfig } from './write/factory.js'
 /**
  * Creates the mod preset sub-module with query and write operations.
  * @example
- * const mp = db.modPresets.get.byNameContains('HD')[0]
+ * const mp = db.modpresets.get.byNameContains('HD')[0]
  */
 export function createModPresetModule(ctx: OsuFilesContext) {
   const q = new ModPresetQuery(ctx.realm)

@@ -58,7 +58,7 @@ const configs = (() => {
         }
       }
 
-      return { name: schema.name, pk, pkOptional: pkInfo.optional, required, fks, strip, guards } as EntityConfig<unknown>
+       return { name: schema.name, pk, pkOptional: pkInfo.optional, required, fks, strip, guards } as EntityConfig
     })
 })()
 
@@ -68,6 +68,6 @@ const configs = (() => {
  * @example
  * getConfig('Beatmap') // { name: 'Beatmap', pk: 'ID', required: [...], ... }
  */
-export function getConfig(name: string): EntityConfig<unknown> | undefined {
+export function getConfig(name: string): EntityConfig | undefined {
   return configs.find(c => c.name === name)
 }

@@ -1,8 +1,3 @@
-import type { Score } from './types.js'
-
-export type { Score }
-export type { Score as default }
-
 export const ScoreSchema = {
   name: 'Score',
   primaryKey: 'ID',

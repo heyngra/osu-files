@@ -2,12 +2,12 @@ import Realm from 'realm'
 import type { Skin, RealmFile, RealmNamedFileUsage } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { SkinQuery } from './get/skins.get.js'
-import { FileQuery } from './get/files.get.js'
 import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { importOskEntries, type ImportedSkinData } from './skin/import.js'
 import { exportOskData } from './skin/export.js'
 import { cleanupOrphanedFiles } from './files.js'
+import { assertWritable, writeRealm } from './context.js'
 
 function getNextBestSkinName(existingNames: Iterable<string>, desiredName: string): string {
   const taken = new Set<number>()
@@ -35,44 +35,54 @@ export function createSkinModule(ctx: OsuFilesContext) {
   skinQuery.enableCache = ctx.queryCache ?? true
   const get = skinQuery.proxify()
   const write = createCrud<Skin>(ctx, getConfig('Skin')!)
-  const fileQuery = new FileQuery(ctx.realm)
-  fileQuery.enableCache = ctx.queryCache ?? true
-  const filesGet = fileQuery.proxify()
-  const filesWrite = createCrud<RealmFile>(ctx, getConfig('File')!)
-
   return {
     get,
     write,
 
     importOsk: async (filePath: string): Promise<ImportedSkinData> => {
-      const data = await importOskEntries(filePath, ctx.filesFolderPath!)
+      if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for import')
+      assertWritable(ctx)
+      const transaction = ctx.fileStore?.beginTransaction()
+      const checkpoint = ctx.logger.checkpoint()
+      const previousTransaction = ctx.fileTransaction
+      try {
+        const data = await importOskEntries(filePath, ctx.filesFolderPath, ctx.fileStore, ctx.archiveLimits, transaction)
+        ctx.fileTransaction = transaction
+        return writeRealm(ctx, () => {
+          transaction?.commit()
 
-      const skinId = new Realm.BSON.UUID()
+          const skinId = new Realm.BSON.UUID()
 
-      const namedFiles: RealmNamedFileUsage[] = []
-      for (const entry of data.entries) {
-        let file = filesGet.byHashEquals(entry.hash)[0]
-        if (!file) file = filesWrite.create({ Hash: entry.hash })
-        namedFiles.push({ File: file, Filename: entry.filename })
-      }
+          const namedFiles: RealmNamedFileUsage[] = []
+          for (const entry of data.entries) {
+            let file = ctx.files.get.byHashEquals(entry.hash)[0]
+            if (!file) file = ctx.files.write.create({ Hash: entry.hash })
+            namedFiles.push({ File: file, Filename: entry.filename })
+          }
 
-      write.create({
-        ID: skinId,
-        Name: data.name,
-        Creator: data.creator,
-        InstantiationInfo: data.instantiationInfo,
-        Hash: data.skinHash,
-        Protected: false,
-        DeletePending: false,
-        Files: namedFiles,
-      })
-
-      return {
-        id: skinId.toString(),
-        name: data.name,
-        creator: data.creator,
-        hash: data.skinHash,
-        files: data.entries.length,
+          write.create({
+            ID: skinId,
+            Name: data.name,
+            Creator: data.creator,
+            InstantiationInfo: data.instantiationInfo,
+            Hash: data.skinHash,
+            Protected: false,
+            DeletePending: false,
+            Files: namedFiles,
+          })
+          return {
+            id: skinId.toString(),
+            name: data.name,
+            creator: data.creator,
+            hash: data.skinHash,
+            files: data.entries.length,
+          }
+        })
+      } catch (error) {
+        try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
+        throw error
+      } finally {
+        ctx.fileTransaction = previousTransaction
       }
     },
 

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync } from 'fs'
-import { join, resolve, sep } from 'path'
+import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { basename, join, resolve, sep } from 'path'
+import { tmpdir } from 'os'
 
 /**
  * Computes SHA-256 hex digest.
@@ -29,6 +30,8 @@ export function md5(buf: Buffer): string {
  * fileStoragePath('/store', 'abcdef123') // '/store/a/ab/abcdef123'
  */
 export function fileStoragePath(base: string, hash: string): string {
+  if (!/^[a-f0-9]{64}$/.test(hash))
+    throw new Error(`Invalid SHA-256 file hash: ${hash}`)
   const path = join(base, hash[0], hash.substring(0, 2), hash)
   const root = resolve(base)
   const resolved = resolve(path)
@@ -45,7 +48,77 @@ export function fileStoragePath(base: string, hash: string): string {
  */
 export function ensureParentDir(p: string): void {
   const dir = p.substring(0, p.lastIndexOf(sep))
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  if (dir && !existsSync(dir)) mkdirSync(dir, { recursive: true })
+}
+
+/** Writes a file through `%TEMP%` and promotes it to the requested path. */
+export function writeFileAtomic(path: string, content: Buffer | string): void {
+  const temporary = temporaryFilePath('output')
+  try {
+    writeFileSync(temporary, content, { flag: 'wx' })
+    const handle = openSync(temporary, 'r+')
+    try { fsyncSync(handle) } finally { closeSync(handle) }
+    promoteFile(temporary, path)
+  } catch (error) {
+    rmSync(temporary, { force: true })
+    throw error
+  }
+}
+
+/** Creates a temporary path without creating the file. */
+export function temporaryFilePath(prefix: string): string {
+  const directory = join(tmpdir(), 'osu-files', 'outputs')
+  mkdirSync(directory, { recursive: true })
+  return join(directory, `${prefix}-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`)
+}
+
+/** Promotes a temporary file without exposing a partial destination. */
+export function promoteFile(source: string, destination: string): void {
+  const backup = temporaryFilePath(`promotion-backup-${basename(destination)}`)
+  const hadDestination = existsSync(destination)
+  let destinationBackedUp = false
+  try {
+    if (hadDestination) {
+      copyFileSync(destination, backup)
+      syncFile(backup)
+      destinationBackedUp = true
+    }
+
+    try {
+      renameSync(source, destination)
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (code === 'EXDEV') {
+        copyFileSync(source, destination)
+        syncFile(destination)
+        rmSync(source, { force: true })
+      } else if (existsSync(destination)) {
+        rmSync(destination)
+        renameSync(source, destination)
+      } else {
+        throw error
+      }
+    }
+    syncFile(destination)
+  } catch (error) {
+    if (destinationBackedUp) {
+      try {
+        copyFileSync(backup, destination)
+        syncFile(destination)
+      } catch { }
+    } else {
+      rmSync(destination, { force: true })
+    }
+    rmSync(source, { force: true })
+    throw error
+  } finally {
+    rmSync(backup, { force: true })
+  }
+}
+
+function syncFile(path: string): void {
+  const handle = openSync(path, 'r+')
+  try { fsyncSync(handle) } finally { closeSync(handle) }
 }
 
 /**

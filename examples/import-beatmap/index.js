@@ -23,7 +23,6 @@ const rl = readline.createInterface({
   try {
     const allFiles = await readdir(beatmapDir)
     const oszFiles = allFiles.filter(f => extname(f).toLowerCase() === '.osz')
-    console.log(allFiles);
     for (const file of oszFiles) {
       const fullPath = join(beatmapDir, file)
       console.log(`Importing ${file}...`)

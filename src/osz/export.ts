@@ -1,15 +1,36 @@
-import { readFileSync, createWriteStream } from 'fs'
+import { createWriteStream, readFileSync, rmSync } from 'fs'
 import { ZipFile } from 'yazl'
 import type { OsuFilesContext } from '../context.js'
 import { serializeOsu } from '../beatmap/serialize.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from './types.js'
-import { fileStoragePath } from '../util.js'
+import { fileStoragePath, promoteFile, temporaryFilePath } from '../util.js'
 
 /** Options for beatmap set export. */
 export type ExportOptions = {
   /** Override beatmap content for specific difficulties. */
   beatmaps?: OsuBeatmap[]
+}
+
+function writeZip(zip: ZipFile, outputPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const temporary = temporaryFilePath('osz')
+    const stream = createWriteStream(temporary)
+    const fail = (error: Error) => {
+      try { stream.destroy() } catch {}
+      try { rmSync(temporary, { force: true }) } catch {}
+      reject(error)
+    }
+    stream.on('error', fail)
+    stream.on('finish', () => {
+      try {
+        promoteFile(temporary, outputPath)
+        resolve()
+      } catch (error) { fail(error as Error) }
+    })
+    zip.outputStream.pipe(stream)
+    zip.end()
+  })
 }
 
 /**
@@ -56,13 +77,7 @@ export async function exportOsz(
     }
   }
 
-  return new Promise((resolve, reject) => {
-    const stream = createWriteStream(outputPath)
-    stream.on('error', reject)
-    stream.on('close', resolve)
-    zip.outputStream.pipe(stream)
-    zip.end()
-  })
+  return writeZip(zip, outputPath)
 }
 
 function findOverrideByFilename(filename: string, overrides: Map<string, OsuBeatmap>): OsuBeatmap | undefined {
@@ -107,11 +122,5 @@ export async function exportOszFromData(
     }
   }
 
-  return new Promise((resolve, reject) => {
-    const stream = createWriteStream(outputPath)
-    stream.on('error', reject)
-    stream.on('close', resolve)
-    zip.outputStream.pipe(stream)
-    zip.end()
-  })
+  return writeZip(zip, outputPath)
 }

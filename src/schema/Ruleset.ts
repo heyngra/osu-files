@@ -1,8 +1,3 @@
-import type { Ruleset } from './types.js'
-
-export type { Ruleset }
-export type { Ruleset as default }
-
 export const RulesetSchema = {
   name: 'Ruleset',
   primaryKey: 'ShortName',
