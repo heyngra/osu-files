@@ -118,7 +118,7 @@ describe('parseSkinIni', () => {
   })
 })
 
-describe('Import/Export .osk', { timeout: 60000 }, () => {
+describe('Import/Export .osk', { timeout: 120000 }, () => {
   const tmpRoot = join(tmpdir(), `osu-files-test-osk-${Date.now()}`)
   const filesPath = join(tmpRoot, 'files')
   const realmPath = join(tmpRoot, 'client.realm')

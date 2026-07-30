@@ -278,68 +278,67 @@ export async function importOsz(ctx: OsuFilesContext, filePath: string): Promise
 
   const entries = await readZipEntriesToFiles(filePath, ctx.archiveLimits)
   if (entries.length === 0) throw new Error('Empty archive')
-
-  const prefix = detectCommonPrefix(entries.map(e => e.filename))
-  const normalized = entries.map(e => ({
-    filename: stripPrefix(e.filename, prefix),
-    path: e.path,
-    hash: e.hash,
-  }))
-
-  const osuEntries: OsuEntry[] = []
-  for (const entry of normalized) {
-    if (entry.filename.toLowerCase().endsWith('.osu')) {
-      const buffer = readFileSync(entry.path)
-      const beatmap = parseOsu(buffer.toString('utf-8'))
-      beatmap.metadata.beatmapID = beatmap.metadata.beatmapID ?? -1
-      beatmap.metadata.beatmapSetID = beatmap.metadata.beatmapSetID ?? -1
-      osuEntries.push({
-        filename: entry.filename,
-        buffer,
-        hash: entry.hash,
-        md5Hash: md5(buffer),
-        beatmap,
-      })
-    }
-  }
-  if (osuEntries.length === 0) {
-    for (const entry of entries) rmSync(entry.path, { force: true })
-    throw new Error('Archive contains no .osu beatmaps')
-  }
-
-  const setHash = computeSetHash(osuEntries.map(e => ({ filename: e.filename, content: e.buffer })))
-  const firstMeta = osuEntries[0]?.beatmap.metadata
-  const onlineID = (firstMeta?.beatmapSetID ?? -1) > 0 ? firstMeta!.beatmapSetID : -1
-  const fileTransaction = ctx.fileStore?.beginTransaction()
-  const checkpoint = ctx.logger.checkpoint()
-  const previousTransaction = ctx.fileTransaction
-  ctx.fileTransaction = fileTransaction
-
   try {
-    const result = writeRealm(ctx, () => {
-      for (const entry of normalized) fileTransaction?.putFile(entry.path, entry.hash)
-      fileTransaction?.commit()
-      return importSet(ctx, {
-        onlineID,
-        setHash,
-        status: 0,
-        protected: false,
-        files: normalized.map(e => ({ hash: e.hash, filename: e.filename })),
-        beatmaps: osuEntries.map(e => ({
-          filename: e.filename,
-          hash: e.hash,
-          md5Hash: e.md5Hash,
-          osuBeatmap: e.beatmap,
-        })),
+    const prefix = detectCommonPrefix(entries.map(e => e.filename))
+    const normalized = entries.map(e => ({
+      filename: stripPrefix(e.filename, prefix),
+      path: e.path,
+      hash: e.hash,
+    }))
+
+    const osuEntries: OsuEntry[] = []
+    for (const entry of normalized) {
+      if (entry.filename.toLowerCase().endsWith('.osu')) {
+        const buffer = readFileSync(entry.path)
+        const beatmap = parseOsu(buffer.toString('utf-8'))
+        beatmap.metadata.beatmapID = beatmap.metadata.beatmapID ?? -1
+        beatmap.metadata.beatmapSetID = beatmap.metadata.beatmapSetID ?? -1
+        osuEntries.push({
+          filename: entry.filename,
+          buffer,
+          hash: entry.hash,
+          md5Hash: md5(buffer),
+          beatmap,
+        })
+      }
+    }
+    if (osuEntries.length === 0) throw new Error('Archive contains no .osu beatmaps')
+
+    const setHash = computeSetHash(osuEntries.map(e => ({ filename: e.filename, content: e.buffer })))
+    const firstMeta = osuEntries[0]?.beatmap.metadata
+    const onlineID = (firstMeta?.beatmapSetID ?? -1) > 0 ? firstMeta!.beatmapSetID : -1
+    const fileTransaction = ctx.fileStore?.beginTransaction()
+    const checkpoint = ctx.logger.checkpoint()
+    const previousTransaction = ctx.fileTransaction
+    ctx.fileTransaction = fileTransaction
+
+    try {
+      const result = writeRealm(ctx, () => {
+        for (const entry of normalized) fileTransaction?.putFile(entry.path, entry.hash)
+        fileTransaction?.commit()
+        return importSet(ctx, {
+          onlineID,
+          setHash,
+          status: 0,
+          protected: false,
+          files: normalized.map(e => ({ hash: e.hash, filename: e.filename })),
+          beatmaps: osuEntries.map(e => ({
+            filename: e.filename,
+            hash: e.hash,
+            md5Hash: e.md5Hash,
+            osuBeatmap: e.beatmap,
+          })),
+        })
       })
-    })
-    fileTransaction?.finalize()
-    return result
-  } catch (error) {
-    try { ctx.logger.discardSince(checkpoint) } finally { fileTransaction?.rollback() }
-    throw error
+      fileTransaction?.finalize()
+      return result
+    } catch (error) {
+      try { ctx.logger.discardSince(checkpoint) } finally { fileTransaction?.rollback() }
+      throw error
+    } finally {
+      ctx.fileTransaction = previousTransaction
+    }
   } finally {
     for (const entry of entries) rmSync(entry.path, { force: true })
-    ctx.fileTransaction = previousTransaction
   }
 }

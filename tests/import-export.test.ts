@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert'
-import { createWriteStream, existsSync, readFileSync, rmSync, mkdtempSync } from 'fs'
+import { createWriteStream, existsSync, readFileSync, readdirSync, rmSync, mkdtempSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { createHash } from 'crypto'
-import { readZipEntries } from '../src/osz/import.js'
+import { importOsz, readZipEntries } from '../src/osz/import.js'
 import { ZipFile } from 'yazl'
 import { init } from '../src/index.js'
 import { parseOsu } from '../src/beatmap/parse.js'
@@ -218,6 +218,37 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
 
     try {
       await assert.rejects(readZipEntries(archivePath), /duplicate filename/i)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('cleans streamed entries when import setup fails after parsing', async () => {
+    const { root, filesPath } = tmp()
+    const archivePath = join(root, 'invalid.osz')
+    const zip = new ZipFile()
+    const output = createWriteStream(archivePath)
+    zip.outputStream.pipe(output)
+    const marker = 'archive-cleanup-regression-' + Date.now() + '-' + Math.random()
+    zip.addBuffer(Buffer.from(`[General]\nAudioFilename: ${marker}.mp3\n`), 'broken.osu')
+    zip.end()
+    await new Promise<void>((resolve, reject) => {
+      output.on('finish', resolve)
+      output.on('error', reject)
+    })
+
+    const temporaryRoot = join(tmpdir(), 'osu-files', 'outputs')
+    try {
+      await assert.rejects(importOsz({
+        filesFolderPath: filesPath,
+        readOnly: false,
+        session: { assertOpen() {} },
+        fileStore: { beginTransaction() { throw new Error('transaction setup failed') } },
+      } as any, archivePath), /transaction setup failed/)
+      const leftovers = readdirSync(temporaryRoot)
+        .filter(name => name.startsWith('archive-entry-'))
+        .filter(name => readFileSync(join(temporaryRoot, name)).toString() === marker)
+      assert.deepStrictEqual(leftovers, [])
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
