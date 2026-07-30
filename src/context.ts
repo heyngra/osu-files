@@ -4,7 +4,8 @@ import type { FileStore } from './file-store.js'
 import type { RealmSession } from './realm-session.js'
 import type { ArchiveLimits } from './osz/import.js'
 import type { FileStoreTransaction } from './file-store.js'
-import { registerRealmGeneration } from './get/base.js'
+import { registerRealmEditHooks, registerRealmGeneration } from './get/base.js'
+import { LogAction, snapshot } from './write/logger.js'
 import type { BeatmapModule } from './beatmaps.js'
 import type { ScoreModule } from './scores.js'
 import type { BeatmapSetModule } from './sets.js'
@@ -71,5 +72,9 @@ export function markChanged(ctx: OsuFilesContext): void {
 
 export function registerContextGeneration(ctx: OsuFilesContext): void {
   registerRealmGeneration(ctx.realm, () => ctx.queryGeneration.value, () => ctx.queryGeneration.value++)
+  registerRealmEditHooks(ctx.realm, {
+    snapshot,
+    log: (entity, _action, primaryKey, before, after) => ctx.logger.log(entity, LogAction.Update, primaryKey, before, after),
+  })
   ctx.realm.addListener('change', () => ctx.queryGeneration.value++)
 }

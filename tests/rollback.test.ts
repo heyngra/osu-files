@@ -73,6 +73,28 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     osu.close()
   })
 
+  it('AutoEdit commits an update that can be rolled back', async () => {
+    const { default: Realm } = await import('realm')
+    const osu = init(realmPath, { schemaVersion: 51 })
+    const id = new Realm.BSON.UUID()
+    osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4, Metadata: { Title: 'Old', TitleUnicode: '', Artist: '', ArtistUnicode: '', Author: { OnlineID: 1, Username: 'Author', CountryCode: 'Unknown' }, Source: '', Tags: '', PreviewTime: -1, AudioFile: '', BackgroundFile: '', UserTags: [] } })
+
+    const session = osu.beatmaps.get.byId(id).autoEdit()
+    for (const beatmap of session) {
+      beatmap.DifficultyName = 'Edited'
+      beatmap.Metadata!.Title = 'New'
+    }
+    session.commit()
+
+    assert.strictEqual(osu.beatmaps.get.byId(id)[0].DifficultyName, 'Edited')
+    assert.strictEqual(osu.beatmaps.get.byId(id)[0].Metadata!.Title, 'New')
+    assert.strictEqual(osu.logger.entries.at(-1)?.action, 'update')
+    assert.strictEqual(osu.logger.rollbackLast(), true)
+    assert.strictEqual(osu.beatmaps.get.byId(id)[0].DifficultyName, null)
+    assert.strictEqual(osu.beatmaps.get.byId(id)[0].Metadata!.Title, 'Old')
+    osu.close()
+  })
+
   it('delete action is logged', async () => {
     const { default: Realm } = await import('realm')
     const osu = init(realmPath, { schemaVersion: 51 })

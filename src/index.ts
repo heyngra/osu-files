@@ -55,6 +55,7 @@ import type { ImportedSkinData } from './skin/import.js'
 export * from './schema/index.js'
 export { RollbackEntry, type RollbackOptions }
 export { FileStore } from './file-store.js'
+export { EditSession } from './edit-session.js'
 export { RealmSession, RealmClosedError, RealmReadOnlyError } from './realm-session.js'
 export { CURRENT_SCHEMA_VERSION, MIN_SCHEMA_VERSION } from './schema/version.js'
 export { type MigrationEvent, type MigrationReport } from './migrations.js'

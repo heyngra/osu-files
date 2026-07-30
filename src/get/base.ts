@@ -1,5 +1,13 @@
 import Realm from 'realm'
 import { RealmClosedError } from '../realm-session.js'
+import { EditSession } from '../edit-session.js'
+import { getConfig } from '../write/factory.js'
+import '../disposable.js'
+
+export type RealmEditHooks = {
+  snapshot(realm: Realm, entity: string, primaryKey: unknown): Record<string, unknown> | null
+  log(entity: string, action: 'update', primaryKey: unknown, before: unknown, after: unknown): void
+}
 
 export abstract class EntityQuery<T> {
   private _preds: string[] = []
@@ -8,6 +16,8 @@ export abstract class EntityQuery<T> {
   private _sortAscending = true
   private _cached: T[] | null = null
   private _cachedGeneration = -1
+  private _editing = false
+  private _editSession: EditSession<T> | null = null
 
   /** Cache the result after first terminal access. @default true */
   enableCache = true
@@ -19,6 +29,35 @@ export abstract class EntityQuery<T> {
 
   [Symbol.iterator](): Iterator<T> {
     return this._eval()[Symbol.iterator]()
+  }
+
+  /**
+   * Enables buffered edits while preserving further query chaining.
+   *
+   * @example
+   * using session = db.beatmaps.get.autoEdit().byAuthor('Monstrata')
+   * for (const beatmap of session)
+   *   beatmap.Metadata!.Author!.Username = 'Sotarks'
+   * // Commits automatically when the scope ends.
+   */
+  autoEdit(): this {
+    const query = this._clone()
+    query._editing = true
+    return query
+  }
+
+  /** Commits all buffered edits and writes rollback entries. */
+  commit(): void {
+    this._editSession?.commit()
+  }
+
+  /** Discards all buffered edits without writing to Realm. */
+  rollback(): void {
+    this._editSession?.rollback()
+  }
+
+  [Symbol.dispose](): void {
+    this.commit()
   }
 
   /**
@@ -107,6 +146,15 @@ export abstract class EntityQuery<T> {
     if (this._preds.length > 0) results = results.filtered(this._preds.join(' AND '), ...this._args)
     if (this._sortField) results = results.sorted(this._sortField, this._sortAscending)
     const arr = [...results]
+    if (this._editing) {
+      const config = getConfig(this._name)
+      this._editSession ??= new EditSession(this._realm, arr, {
+        entity: this._name,
+        primaryKey: config?.pk,
+        hooks: realmEditHooks(this._realm),
+      })
+      return this._editSession.map(value => value)
+    }
     if (this.enableCache && this._preds.length > 0) {
       this._cached = arr
       this._cachedGeneration = generation
@@ -119,6 +167,7 @@ export abstract class EntityQuery<T> {
       _preds: [...this._preds],
       _args: [...this._args],
       _cached: null,
+      _editSession: null,
     }).proxify()
   }
 
@@ -133,6 +182,16 @@ const generations = new WeakMap<object, { get: () => number; mark: () => void }>
 
 export function registerRealmGeneration(realm: Realm, getGeneration: () => number, markGeneration: () => void): void {
   generations.set(realm, { get: getGeneration, mark: markGeneration })
+}
+
+const editHooks = new WeakMap<object, RealmEditHooks>()
+
+export function registerRealmEditHooks(realm: Realm, hooks: RealmEditHooks): void {
+  editHooks.set(realm, hooks)
+}
+
+function realmEditHooks(realm: Realm): RealmEditHooks | undefined {
+  return editHooks.get(realm)
 }
 
 export function markRealmChanged(realm: Realm): void {

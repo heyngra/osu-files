@@ -73,6 +73,8 @@ function serialize(obj: unknown, seen?: Set<string>): unknown {
   if (typeof obj !== 'object') return obj
   if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(v => serialize(v, seen))
+  if (typeof (obj as any)[Symbol.iterator] === 'function')
+    return [...(obj as Iterable<unknown>)].map(v => serialize(v, seen))
   if (typeof (obj as any)?.toHexString === 'function')
     return (obj as any).toHexString()
 
