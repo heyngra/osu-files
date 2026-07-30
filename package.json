@@ -21,8 +21,8 @@
     "typecheck": "tsc --noEmit",
     "test:ci": "npm run typecheck && npm test",
     "prepublishOnly": "npm run build",
-    "test": "node --import tsx --import ./tests/setup.js --test --test-force-exit tests/*.test.ts",
-    "test:int": "tsx --import ./tests/setup.js --test tests/**/*.test.ts"
+    "test": "node tests/run-tests.js",
+    "test:int": "node tests/run-tests.js"
   },
   "dependencies": {
     "lzma-web": "^3.0.1",
