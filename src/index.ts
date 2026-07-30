@@ -64,8 +64,12 @@ export { type MigrationEvent, type MigrationReport } from './migrations.js'
 export { hasFilesFolder } from './context.js'
 export { BUILT_IN_SKINS, BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from './skin/constants.js'
 export type { ImportedSkinData } from './skin/import.js'
-export { parseSkinIni } from './skin/skin-ini.js'
-export type { SkinIni, SkinIniGeneral, SkinIniColours, SkinIniFonts, SkinIniCatchTheBeat, SkinIniMania, SkinIniColour } from './skin/skin-ini.js'
+export { cloneSkinIni, parseSkinIni, serializeSkinIni } from './skin/skin-ini.js'
+export type {
+  SkinIni, SkinIniDocument, SkinIniNode, SkinIniLineNode, SkinIniEntryNode, SkinIniSectionNode,
+  SkinIniParseIssue, SkinIniGeneral, SkinIniColours, SkinIniFonts, SkinIniCatchTheBeat,
+  SkinIniMania, SkinIniManiaConfiguration, SkinIniColour, SkinIniValue,
+} from './skin/skin-ini.js'
 
 export type { KeyBindingDef } from './keybindings/types.js'
 export { GlobalAction, OsuAction, TaikoAction, CatchAction, ManiaAction, RulesetAction, RulesetName, RulesetOnlineID } from './keybindings/types.js'

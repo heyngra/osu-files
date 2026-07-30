@@ -36,16 +36,17 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
   report.candidates = orphaned.length
   if (orphaned.length === 0) return report
 
+  const orphanedHashes = orphaned.map(file => file.Hash as string)
   writeRealm(ctx, () => {
     for (const file of orphaned) ctx.realm.delete(file)
   })
 
-  for (const file of orphaned) {
+  for (const hash of orphanedHashes) {
     try {
-      if (ctx.fileStore?.remove(file.Hash!)) report.removed++
+      if (ctx.fileStore?.remove(hash)) report.removed++
       else report.missing++
     } catch (error) {
-      report.failed.push({ hash: file.Hash!, error })
+      report.failed.push({ hash, error })
     }
   }
   markChanged(ctx)

@@ -6,7 +6,7 @@ import { tmpdir } from 'os'
 import { createHash } from 'crypto'
 import { readZipEntries } from '../src/osz/import.js'
 import { init } from '../src/index.js'
-import { parseSkinIni } from '../src/skin/skin-ini.js'
+import { parseSkinIni, serializeSkinIni } from '../src/skin/skin-ini.js'
 import { SAMPLE_OSK } from './helpers.js'
 
 function sha256(buf: Buffer): string {
@@ -96,6 +96,18 @@ describe('parseSkinIni', () => {
     const result = parseSkinIni('')
     assert.strictEqual(Object.keys(result.raw).length, 0)
     assert.strictEqual(result.general.name, undefined)
+  })
+
+  it('round-trips losslessly and supports typed edits', () => {
+    const source = '; header\r\n[General]\r\nName: Test // preserved\r\nUnknown: value\r\n\r\n[Colours]\r\nCombo1: 255, 0, 0\r\n'
+    const document = parseSkinIni(source)
+    assert.strictEqual(serializeSkinIni(document), source)
+    document.general.animationFramerate = 120
+    document.set('Colours', 'Combo2', [0, 255, 0])
+    const serialized = serializeSkinIni(document)
+    assert.ok(serialized.includes('AnimationFramerate: 120'))
+    assert.ok(serialized.includes('Unknown: value'))
+    assert.ok(serialized.includes('Combo2: 0,255,0'))
   })
 
   it('parses real WhiteCat skin.ini', async () => {
@@ -279,5 +291,23 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
 
     osu.close()
     rmSync(queryRoot, { recursive: true, force: true })
+  })
+
+  it('reads and atomically edits skin.ini', async () => {
+    const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
+    const skin = osu.skins.get[0]
+    const before = osu.skins.readIni(String(skin.ID))
+    assert.ok(before)
+    assert.ok(before.general.name)
+    const oldHash = skin.Hash
+    assert.strictEqual(osu.skins.editIni(String(skin.ID), ini => {
+      ini.general.animationFramerate = 120
+    }), true)
+    assert.strictEqual(osu.skins.editIni(String(skin.ID), ini => {
+      ini.general.animationFramerate = 120
+    }), false)
+    assert.strictEqual(osu.skins.get[0].Hash === oldHash, false)
+    assert.strictEqual(osu.skins.readIni(String(skin.ID))?.general.animationFramerate, 120)
+    osu.close()
   })
 })
