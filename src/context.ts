@@ -4,7 +4,7 @@ import type { FileStore } from './file-store.js'
 import type { RealmSession } from './realm-session.js'
 import type { ArchiveLimits } from './osz/import.js'
 import type { FileStoreTransaction } from './file-store.js'
-import { registerRealmEditHooks, registerRealmGeneration } from './get/base.js'
+import { registerRealmEditHooks, registerRealmGeneration, registerRealmWriteHooks } from './get/base.js'
 import { LogAction, snapshot } from './write/logger.js'
 import type { BeatmapModule } from './beatmaps.js'
 import type { ScoreModule } from './scores.js'
@@ -75,6 +75,11 @@ export function registerContextGeneration(ctx: OsuFilesContext): void {
   registerRealmEditHooks(ctx.realm, {
     snapshot,
     log: (entity, _action, primaryKey, before, after) => ctx.logger.log(entity, LogAction.Update, primaryKey, before, after),
+  })
+  registerRealmWriteHooks(ctx.realm, {
+    assertWritable: () => assertWritable(ctx),
+    snapshot: (entity, pk) => snapshot(ctx.realm, entity, pk),
+    log: (entity, action, pk, before, after) => ctx.logger.log(entity, action === 'delete' ? LogAction.Delete : LogAction.Update, pk, before, after),
   })
   ctx.realm.addListener('change', () => ctx.queryGeneration.value++)
 }

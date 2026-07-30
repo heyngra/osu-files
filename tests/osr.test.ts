@@ -186,6 +186,15 @@ describe('Import .osr', { timeout: 60000 }, () => {
     osu.close()
   })
 
+  it('asynchronously reads and imports .osr files', async () => {
+    const asyncRealmPath = join(tmpRoot, 'async-client.realm')
+    const osu = init(asyncRealmPath, { schemaVersion: 51, filesFolderPath: filesPath })
+    const result = await osu.osr.importAsync(SAMPLE_OSR, { suppressWarning: true })
+    assert.strictEqual(result.playerName, 'Cookiezi')
+    assert.strictEqual(osu.scores.get.length, 1)
+    osu.close()
+  })
+
   it('stores replay file blob in files folder', () => {
     const fileHash = sha256(readFileSync(SAMPLE_OSR))
     const storePath = join(filesPath, fileHash[0], fileHash.substring(0, 2), fileHash)

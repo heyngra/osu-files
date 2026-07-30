@@ -48,7 +48,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
       try {
         const data = await importOskEntries(filePath, ctx.filesFolderPath, ctx.fileStore, ctx.archiveLimits, transaction)
         ctx.fileTransaction = transaction
-        return writeRealm(ctx, () => {
+        const result = writeRealm(ctx, () => {
           transaction?.commit()
 
           const skinId = new Realm.BSON.UUID()
@@ -78,6 +78,8 @@ export function createSkinModule(ctx: OsuFilesContext) {
             files: data.entries.length,
           }
         })
+        transaction?.finalize()
+        return result
       } catch (error) {
         try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
         throw error

@@ -12,6 +12,7 @@ export type MigrationEvent = {
   name: string
   message: string
   level: 'info' | 'warning'
+  durationMs?: number
 }
 
 /** Options and results available to migration handlers. */
@@ -275,11 +276,15 @@ export function runMigrations(oldRealm: Realm, newRealm: Realm, context: Migrati
     const migration = steps.get(version)
     if (!migration) throw new Error(`[osu-files] Missing migration for Realm schema version ${version}`)
     const before = context.events.length
+    const started = Date.now()
     migration.run(oldRealm, newRealm, context)
     if (context.events.length === before) {
-      const event = { version, name: migration.name, message: 'Completed', level: 'info' as const }
+      const event = { version, name: migration.name, message: 'Completed', level: 'info' as const, durationMs: Date.now() - started }
       context.events.push(event)
       context.onEvent?.(event)
+    } else {
+      for (let i = before; i < context.events.length; i++)
+        context.events[i].durationMs ??= Date.now() - started
     }
   }
 

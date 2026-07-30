@@ -167,6 +167,17 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
     }
   })
 
+  it('rejects invalid archive limits before opening the archive', () => {
+    assert.throws(
+      () => readZipEntries(SAMPLE_OSZ, { maxEntries: 0 }),
+      /archive limit 'maxEntries' must be a positive safe integer/,
+    )
+    assert.throws(
+      () => readZipEntries(SAMPLE_OSZ, { maxCompressionRatio: Number.POSITIVE_INFINITY }),
+      /archive limit 'maxCompressionRatio' must be a positive safe integer/,
+    )
+  })
+
   it('save returns true when hash changes (line ending normalization)', async () => {
     const { root, filesPath, realmPath } = tmp()
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })

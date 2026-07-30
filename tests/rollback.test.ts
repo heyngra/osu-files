@@ -95,6 +95,64 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     osu.close()
   })
 
+  it('batch write.update applies to all matched and logs rollback', async () => {
+    const { default: Realm } = await import('realm')
+    const osu = init(realmPath, { schemaVersion: 51 })
+    osu.beatmaps.write.create({ ID: new Realm.BSON.UUID(), Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 120, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+    osu.beatmaps.write.create({ ID: new Realm.BSON.UUID(), Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 90, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+
+    const result = osu.beatmaps.get.byBpmAbove(100).write.update({ Hidden: true })
+    assert.strictEqual(result, 1)
+    assert.strictEqual(osu.beatmaps.get.byBpmAbove(100)[0].Hidden, true)
+    assert.strictEqual(osu.beatmaps.get.byBpmBelow(100)[0].Hidden, false)
+    assert.strictEqual(osu.logger.entries.at(-1)?.action, 'update')
+    assert.strictEqual(osu.logger.rollbackLast(), true)
+    assert.strictEqual(osu.beatmaps.get.byBpmAbove(100)[0].Hidden, false)
+    osu.close()
+  })
+
+  it('batch write.delete removes all matched and logs rollback', async () => {
+    const { default: Realm } = await import('realm')
+    const osu = init(realmPath, { schemaVersion: 51 })
+    const id = new Realm.BSON.UUID()
+    osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+
+    assert.strictEqual(osu.beatmaps.get.byId(id).length, 1)
+    const result = osu.beatmaps.get.byId(id).write.delete()
+    assert.strictEqual(result, 1)
+    assert.strictEqual(osu.beatmaps.get.byId(id).length, 0)
+    assert.strictEqual(osu.logger.entries.at(-1)?.action, 'delete')
+    assert.strictEqual(osu.logger.rollbackLast(), true)
+    assert.strictEqual(osu.beatmaps.get.byId(id).length, 1)
+    osu.close()
+  })
+
+  it('limit caps query results', async () => {
+    const { default: Realm } = await import('realm')
+    const osu = init(realmPath, { schemaVersion: 51 })
+    const initialCount = osu.beatmaps.get.byBpmBetween(99, 201).count()
+    osu.beatmaps.write.create({ ID: new Realm.BSON.UUID(), Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 100, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+    osu.beatmaps.write.create({ ID: new Realm.BSON.UUID(), Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 150, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+    osu.beatmaps.write.create({ ID: new Realm.BSON.UUID(), Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 200, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+
+    assert.strictEqual(osu.beatmaps.get.limit(2).length, 2)
+    assert.strictEqual(osu.beatmaps.get.sortedBy('BPM', false).limit(1).length, 1)
+    assert.strictEqual(osu.beatmaps.get.sortedBy('BPM', false).limit(1)[0].BPM, 200)
+    assert.strictEqual(osu.beatmaps.get.byBpmBetween(99, 201).count(), initialCount + 3)
+    assert.strictEqual(osu.beatmaps.get.byBpmBetween(99, 201).limit(2).count(), initialCount + 3)
+    assert.strictEqual(osu.beatmaps.get.sortedBy('BPM', false).byBpmBetween(199, 201).first()!.BPM, 200)
+    assert.strictEqual(osu.beatmaps.get.byBpmBetween(99, 201).limit(2).toArray().length, 2)
+    osu.close()
+  })
+
+  it('honours the configured rollback memory limit', async () => {
+    const { default: Realm } = await import('realm')
+    const osu = init(realmPath, { schemaVersion: 51, rollback: { maxSize: 1 } })
+    osu.beatmaps.write.create({ ID: new Realm.BSON.UUID(), Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4 })
+    assert.strictEqual(osu.logger.entries.length, 0)
+    osu.close()
+  })
+
   it('delete action is logged', async () => {
     const { default: Realm } = await import('realm')
     const osu = init(realmPath, { schemaVersion: 51 })

@@ -206,11 +206,13 @@ export function saveOsuBeatmap(ctx: OsuFilesContext, beatmapIdStr: string, modif
   const previousTransaction = ctx.fileTransaction
   ctx.fileTransaction = transaction
   try {
-    return writeRealm(ctx, () => {
+    const result = writeRealm(ctx, () => {
       const result = saveOsuBeatmapInternal(ctx, beatmapIdStr, modified, transaction)
       transaction?.commit()
       return result
     })
+    transaction?.finalize()
+    return result
   } catch (error) {
     try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
     throw error

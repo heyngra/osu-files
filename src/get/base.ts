@@ -2,12 +2,30 @@ import Realm from 'realm'
 import { RealmClosedError } from '../realm-session.js'
 import { EditSession } from '../edit-session.js'
 import { getConfig } from '../write/factory.js'
+import { ValidationError } from '../write/validate.js'
 import '../disposable.js'
 
 export type RealmEditHooks = {
   snapshot(realm: Realm, entity: string, primaryKey: unknown): Record<string, unknown> | null
   log(entity: string, action: 'update', primaryKey: unknown, before: unknown, after: unknown): void
 }
+
+export type RealmWriteHooks = {
+  assertWritable(): void
+  snapshot(entity: string, pk: unknown): Record<string, unknown> | null
+  log(entity: string, action: 'update' | 'delete', pk: unknown, before: unknown, after: unknown): void
+}
+
+/** Batch write operations returned by {@link EntityQuery.write}. */
+export type WriteOps<T> = {
+  /** Deletes every entity matched by the query in one transaction. */
+  delete(): number
+  /** Applies the same patch to every entity matched by the query in one transaction. */
+  update(patch: Record<string, unknown>): number
+}
+
+/** A materialised query result with the same snapshot semantics as the array-like API. */
+export type QuerySnapshot<T> = T[]
 
 export abstract class EntityQuery<T> {
   private _preds: string[] = []
@@ -18,6 +36,7 @@ export abstract class EntityQuery<T> {
   private _cachedGeneration = -1
   private _editing = false
   private _editSession: EditSession<T> | null = null
+  private _limit?: number
 
   /** Cache the result after first terminal access. @default true */
   enableCache = true
@@ -46,6 +65,42 @@ export abstract class EntityQuery<T> {
     return query
   }
 
+  /**
+   * Limits the number of results.
+   * @example db.beatmaps.get.sortedBy('StarRating', false).limit(10)
+   */
+  limit(n: number): this {
+    if (!Number.isSafeInteger(n) || n < 0) throw new Error('[osu-files] limit must be a non-negative safe integer')
+    const q = this._clone()
+    q._limit = n
+    return q
+  }
+
+  /** Returns the number of matching objects without materialising them.
+   * `limit()` does not affect this count.
+   * @returns Number of Realm objects matching the current predicates.
+   */
+  count(): number {
+    if (this._realm.isClosed) throw new RealmClosedError()
+    return this._resultsCore(false).length
+  }
+
+  /** Returns the first matching object without materialising the full result set.
+   * @returns The first object in the current sort order, or `undefined`.
+   */
+  first(): T | undefined {
+    if (this._realm.isClosed) throw new RealmClosedError()
+    const results = this._resultsCore(true)
+    return results.length > 0 ? results[0] : undefined
+  }
+
+  /** Materialises the query into a detached JavaScript array snapshot.
+   * @returns A new array containing the current query results.
+   */
+  toArray(): QuerySnapshot<T> {
+    return this._eval().slice()
+  }
+
   /** Commits all buffered edits and writes rollback entries. */
   commit(): void {
     this._editSession?.commit()
@@ -58,6 +113,75 @@ export abstract class EntityQuery<T> {
 
   [Symbol.dispose](): void {
     this.commit()
+  }
+
+  /**
+   * Batch write operations on the matched results.
+   *
+   * {@link WriteOps.delete delete} removes every matched entity in one Realm
+   * transaction. {@link WriteOps.update update} applies the same patch to
+   * every entity.
+   *
+   * @example
+   * db.beatmaps.get.byAuthor('Monstrata').write.delete()  // deletes all matched
+   * db.beatmaps.get.byBpmAbove(180).write.update({ Hidden: true })  // updates all matched
+   */
+  get write(): WriteOps<T> {
+    const hooks = realmWriteHooks(this._realm)
+    if (!hooks) throw new Error('[osu-files] Query is not attached to a database context')
+    const cfg = getConfig(this._name)
+    if (!cfg) throw new Error(`[osu-files] No entity config for '${this._name}'`)
+    const self = this
+    return {
+      delete(): number {
+        hooks.assertWritable()
+        const items = self._evalCore()
+        if (items.length === 0) return 0
+        for (const item of items) {
+          for (const guard of cfg.guards ?? []) {
+            const refs = self._realm.objects(guard.type).filtered(guard.filter, (item as any)[cfg.pk])
+            if (refs.length > 0)
+              throw new ValidationError(`Cannot delete ${cfg.name} '${(item as any)[cfg.pk]}': ${refs.length} ${guard.label}(s) reference it`)
+          }
+        }
+        const snapshots = items.map(item => ({
+          id: (item as any)[cfg.pk],
+          before: hooks.snapshot(cfg.name, (item as any)[cfg.pk]),
+        }))
+        const realm = self._realm as Realm & { isInTransaction?: boolean }
+        const apply = () => { for (const item of items) realm.delete(item as never) }
+        realm.isInTransaction ? apply() : realm.write(apply)
+        for (const { id, before } of snapshots)
+          hooks.log(cfg.name, 'delete', id, before, null)
+        markRealmChanged(self._realm)
+        return items.length
+      },
+      update(patch: Record<string, unknown>): number {
+        hooks.assertWritable()
+        const items = self._evalCore()
+        if (items.length === 0) return 0
+        const data: Record<string, unknown> = { ...patch }
+        for (const f of cfg.strip ?? []) delete data[f]
+        const snapshots = items.map(item => ({
+          id: (item as any)[cfg.pk],
+          before: hooks.snapshot(cfg.name, (item as any)[cfg.pk]),
+        }))
+        const realm = self._realm as Realm & { isInTransaction?: boolean }
+        const apply = () => {
+          for (const item of items) {
+            for (const key of Object.keys(data)) {
+              if (key === cfg.pk) continue
+              ;(item as any)[key] = data[key]
+            }
+          }
+        }
+        realm.isInTransaction ? apply() : realm.write(apply)
+        for (const { id, before } of snapshots)
+          hooks.log(cfg.name, 'update', id, before, hooks.snapshot(cfg.name, id))
+        markRealmChanged(self._realm)
+        return items.length
+      },
+    }
   }
 
   /**
@@ -138,14 +262,25 @@ export abstract class EntityQuery<T> {
     return this._fkEq('ID', this._uuid(v))
   }
 
+  private _resultsCore(applyLimit: boolean): any {
+    if (this._realm.isClosed) throw new RealmClosedError()
+    let results = this._realm.objects<T>(this._name)
+    if (this._preds.length > 0) results = results.filtered(this._preds.join(' AND '), ...this._args)
+    if (this._sortField) results = results.sorted(this._sortField, !this._sortAscending)
+    if (applyLimit && this._limit !== undefined)
+      return results.slice(0, this._limit)
+    return results
+  }
+
+  private _evalCore(): T[] {
+    return [...this._resultsCore(true)]
+  }
+
   private _eval(): T[] {
     if (this._realm.isClosed) throw new RealmClosedError()
     const generation = realmGeneration(this._realm)
     if (this.enableCache && this._cached !== null && this._cachedGeneration === generation) return this._cached
-    let results = this._realm.objects<T>(this._name)
-    if (this._preds.length > 0) results = results.filtered(this._preds.join(' AND '), ...this._args)
-    if (this._sortField) results = results.sorted(this._sortField, this._sortAscending)
-    const arr = [...results]
+    const arr = this._evalCore()
     if (this._editing) {
       const config = getConfig(this._name)
       this._editSession ??= new EditSession(this._realm, arr, {
@@ -188,6 +323,16 @@ const editHooks = new WeakMap<object, RealmEditHooks>()
 
 export function registerRealmEditHooks(realm: Realm, hooks: RealmEditHooks): void {
   editHooks.set(realm, hooks)
+}
+
+const writeHooks = new WeakMap<object, RealmWriteHooks>()
+
+export function registerRealmWriteHooks(realm: Realm, hooks: RealmWriteHooks): void {
+  writeHooks.set(realm, hooks)
+}
+
+function realmWriteHooks(realm: Realm): RealmWriteHooks | undefined {
+  return writeHooks.get(realm)
 }
 
 function realmEditHooks(realm: Realm): RealmEditHooks | undefined {

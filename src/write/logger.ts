@@ -109,11 +109,13 @@ export class RollbackLogger {
   private logDir: string
   private realm: Realm
   private resolveConfig: ConfigResolver
+  private readonly maxSize: number
   enabled: boolean
 
   constructor(options: RollbackOptions | undefined, realm: Realm, resolveConfig: ConfigResolver) {
     const opts = { enabled: true, maxSize: 1_048_576, maxAge: 86_400_000, ...options }
     this.enabled = opts.enabled
+    this.maxSize = opts.maxSize
     this.logDir = join(tmpdir(), 'osu-files-rollback')
     this.realm = realm
     this.resolveConfig = resolveConfig
@@ -196,7 +198,7 @@ export class RollbackLogger {
       writeFileSync(file, JSON.stringify(entry, null, 2), 'utf-8')
     } catch {}
 
-    if (this.entrySize > 1_048_576)
+    if (this.entrySize > this.maxSize)
       this.entryList.splice(0, Math.ceil(this.entryList.length * 0.3))
   }
 

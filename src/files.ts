@@ -9,35 +9,58 @@ import { fileStoragePath } from './util.js'
 import { assertWritable, markChanged, writeRealm } from './context.js'
 import type { FileStore } from './file-store.js'
 
+export type FileCleanupReport = {
+  candidates: number
+  removed: number
+  missing: number
+  failed: Array<{ hash: string; error: unknown }>
+}
+
 /**
  * Deletes file records and storage files no longer referenced by any set, skin, or score.
+ * @returns Counts of candidates, removed files, missing files, and failures.
+ * @throws If no writable database is available.
  * @example
  * db.files.cleanupOrphanedFiles()
  */
-export function cleanupOrphanedFiles(ctx: OsuFilesContext): void {
-  if (!ctx.filesFolderPath) return
+export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
+  const report: FileCleanupReport = { candidates: 0, removed: 0, missing: 0, failed: [] }
+  if (!ctx.filesFolderPath) return report
   assertWritable(ctx)
 
-  const referenced = new Set<string>()
-
-  for (const src of [ctx.sets.get, ctx.skins.get, ctx.scores.get]) {
-    for (const s of src) {
-      if (s.DeletePending) continue
-      for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
-    }
-  }
-
-  const orphaned = ctx.files.get.filter(f => f.Hash && !referenced.has(f.Hash))
-  if (orphaned.length === 0) return
+  const fileSchema = ctx.realm.schema.find(schema => schema.name === 'File')
+  const hasBacklinks = !!fileSchema && 'Usages' in fileSchema.properties
+  const orphaned = hasBacklinks
+    ? [...ctx.realm.objects<any>('File').filtered('Usages.@count == 0')]
+    : findOrphanedFilesByScan(ctx)
+  report.candidates = orphaned.length
+  if (orphaned.length === 0) return report
 
   writeRealm(ctx, () => {
     for (const file of orphaned) ctx.realm.delete(file)
   })
 
   for (const file of orphaned) {
-    try { ctx.fileStore?.remove(file.Hash!) } catch { }
+    try {
+      if (ctx.fileStore?.remove(file.Hash!)) report.removed++
+      else report.missing++
+    } catch (error) {
+      report.failed.push({ hash: file.Hash!, error })
+    }
   }
   markChanged(ctx)
+  return report
+}
+
+function findOrphanedFilesByScan(ctx: OsuFilesContext): any[] {
+  const referenced = new Set<string>()
+  for (const src of [ctx.sets.get, ctx.skins.get, ctx.scores.get]) {
+    for (const s of src) {
+      if (s.DeletePending) continue
+      for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
+    }
+  }
+  return ctx.files.get.filter(f => f.Hash && !referenced.has(f.Hash))
 }
 
 /**

@@ -1,7 +1,7 @@
 {
   "name": "osu-files",
   "version": "1.0.0",
-  "description": "A module used to manage, read and modify osu!lazer data.",
+  "description": "Read, modify, and import osu!lazer Realm data and osu! file formats.",
   "license": "MIT",
   "author": "heyn",
   "type": "module",
@@ -18,6 +18,8 @@
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "typecheck": "tsc --noEmit",
+    "test:ci": "npm run typecheck && npm test",
     "prepublishOnly": "npm run build",
     "test": "node --import tsx --import ./tests/setup.js --test --test-force-exit tests/*.test.ts",
     "test:int": "tsx --import ./tests/setup.js --test tests/**/*.test.ts"

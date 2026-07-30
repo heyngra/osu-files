@@ -52,6 +52,7 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
           ;(set.Files as any[]).push(fu)
           markChanged(ctx)
         })
+        transaction?.finalize()
         return { filename, hash, content }
       } catch (error) {
         try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }

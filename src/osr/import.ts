@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'fs'
+import { readFile } from 'fs/promises'
 import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
 import { parseOsr as parseOsrBuffer } from './parse.js'
@@ -291,6 +292,17 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
   assertWritable(ctx)
 
   const buffer = readFileSync(filePath)
+  return importOsrBuffer(ctx, buffer, options)
+}
+
+/** Asynchronously reads and imports an .osr replay without blocking on file I/O. */
+export async function importOsrAsync(ctx: OsuFilesContext, filePath: string, options?: OsrImportOptions): Promise<ParsedReplay> {
+  if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for import')
+  assertWritable(ctx)
+  return importOsrBuffer(ctx, await readFile(filePath), options)
+}
+
+function importOsrBuffer(ctx: OsuFilesContext, buffer: Buffer, options?: OsrImportOptions): ParsedReplay {
   const parsed = parseOsrBuffer(buffer)
 
   const onlineId = parsed.parsedExtra?.online_id ?? 0
@@ -329,6 +341,7 @@ export function importOsr(ctx: OsuFilesContext, filePath: string, options?: OsrI
         Files: files,
       })
     })
+    fileTransaction?.finalize()
   } catch (error) {
     try { ctx.logger.discardSince(checkpoint) } finally { fileTransaction?.rollback() }
     throw error

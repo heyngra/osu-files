@@ -45,7 +45,7 @@ import type { Anchor, Vec2, StoryboardElementSource } from './beatmap/storyboard
 import { realmBeatmapToOsuBeatmap, realmSetToBeatmapSetData, saveOsuBeatmap, createFileRef } from './beatmap/migrate.js'
 import { StoryboardSprite } from './beatmap/storyboard/elements.js'
 import type { FileRef } from './types.js'
-import { importOsr, parseOsr as parseOsrFile, type OsrImportOptions } from './osr/import.js'
+import { importOsr, importOsrAsync, parseOsr as parseOsrFile, type OsrImportOptions } from './osr/import.js'
 import { exportOsr, toBuffer as exportOsrToBuffer } from './osr/export.js'
 import { parseOsr as parseOsrBinary, computeReplayMD5 } from './osr/parse.js'
 import type { ParsedReplay } from './osr/types.js'
@@ -56,6 +56,8 @@ export * from './schema/index.js'
 export { RollbackEntry, type RollbackOptions }
 export { FileStore } from './file-store.js'
 export { EditSession } from './edit-session.js'
+export type { QuerySnapshot, WriteOps } from './get/base.js'
+export type { FileCleanupReport } from './files.js'
 export { RealmSession, RealmClosedError, RealmReadOnlyError } from './realm-session.js'
 export { CURRENT_SCHEMA_VERSION, MIN_SCHEMA_VERSION } from './schema/version.js'
 export { type MigrationEvent, type MigrationReport } from './migrations.js'
@@ -130,17 +132,36 @@ export type OsuFilesAPI = {
   metadata: BeatmapMetadataModule
   /** .osz beatmap archive operations. */
   osz: {
-    /** Imports an .osz file into the Realm database. */
+    /**
+     * Imports an .osz file into the Realm database and content-addressed file store.
+     * @param filePath - Path to the archive.
+     * @returns Imported set metadata and parsed beatmaps.
+     * @throws If the archive is invalid, unsafe, or filesFolderPath is missing.
+     * @example await db.osz.import('./downloads/map.osz')
+     */
     import(filePath: string): Promise<BeatmapSetData>
-    /** Exports a beatmap set to an .osz file. */
+    /** Exports a beatmap set to an .osz file.
+     * @param setID - Beatmap set UUID.
+     * @param outputPath - Destination archive path.
+     * @param options - Optional in-memory beatmap overrides.
+     * @throws If the set or a referenced file is missing.
+     */
     export(setID: string, outputPath: string, options?: { beatmaps?: OsuBeatmap[] }): Promise<void>
     /** Exports BeatmapSetData directly to an .osz file. */
     exportFromData(data: BeatmapSetData, outputPath: string): Promise<void>
   }
   /** .osr replay operations. */
   osr: {
-    /** Imports an .osr replay into the Realm database. */
+    /** Imports an .osr replay into the Realm database.
+     * @param filePath - Path to the replay.
+     * @param options - Beatmap resolution and legacy conversion options.
+     * @returns Parsed replay metadata.
+     */
     import(filePath: string, options?: OsrImportOptions): ParsedReplay
+    /** Asynchronously reads and imports an .osr replay.
+     * @returns A promise for parsed replay metadata.
+     */
+    importAsync(filePath: string, options?: OsrImportOptions): Promise<ParsedReplay>
     /** Exports a score to an .osr replay file. */
     export(scoreId: string, outputPath: string): void
     /** Parses an .osr replay buffer without importing. */
@@ -154,7 +175,10 @@ export type OsuFilesAPI = {
   }
   /** .osk skin archive operations. */
   osk: {
-    /** Imports an .osk skin into the Realm database. */
+    /** Imports an .osk skin into the Realm database and file store.
+     * @param filePath - Path to the skin archive.
+     * @returns Imported skin identity and file count.
+     */
     import(filePath: string): Promise<ImportedSkinData>
     /** Exports a skin to an .osk file on disk. */
     export(skinId: string, outputPath: string): Promise<void>
@@ -214,6 +238,8 @@ export type InitOptions = {
  * @param path - Path to client.realm.
  * @param options - Configuration options.
  * @returns The osu-files API object with close(), logger, and all sub-modules.
+ * @throws If the requested schema version is unsupported or Realm cannot open the file.
+ * @see https://github.com/ppy/osu for the upstream osu!lazer implementation.
  * @example
  * const db = init('./client.realm', { filesFolderPath: './files' })
  * const sets = db.sets.get
@@ -340,6 +366,8 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
     osr: {
       /** Imports an .osr replay into the Realm database. */
       import: (filePath: string, options?: OsrImportOptions) => importOsr(ctx, filePath, options),
+      /** Asynchronously reads and imports an .osr replay. */
+      importAsync: (filePath: string, options?: OsrImportOptions) => importOsrAsync(ctx, filePath, options),
       /** Exports a score to an .osr replay file. */
       export: (scoreId: string, outputPath: string) => exportOsr(ctx, scoreId, outputPath),
       /** Parses an .osr replay buffer without importing. */
