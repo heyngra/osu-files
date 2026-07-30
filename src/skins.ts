@@ -8,7 +8,7 @@ import { getConfig } from './write/factory.js'
 import { importOskEntries, type ImportedSkinData } from './skin/import.js'
 import { exportOskData } from './skin/export.js'
 import { cleanupOrphanedFiles, cleanupBlobIfUnreferenced, getRealmFile } from './files.js'
-import { assertWritable, writeRealm } from './context.js'
+import { assertWritable, markChanged, writeRealm } from './context.js'
 import { cloneSkinIni, parseSkinIni, serializeSkinIni, type SkinIniDocument } from './skin/skin-ini.js'
 import { fileStoragePath } from './util.js'
 import { computeSkinHash, fullSkinContentHash, normalizeFilename, validateOwnerHashes } from './integrity.js'
@@ -87,7 +87,9 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
   if (skin.Protected) throw new Error(`Cannot modify protected skin '${skin.Name}'`)
 
   const content = Buffer.from(serializeSkinIni(document), 'utf8')
-  const existing = iniUsage(skin)
+  const fileUsages = [...skin.Files]
+  const existingIndex = fileUsages.findIndex(file => file.Filename?.replace(/\\/g, '/').toLowerCase() === 'skin.ini')
+  const existing = existingIndex >= 0 ? fileUsages[existingIndex] : undefined
   const oldHash = existing?.File?.Hash
   const oldContent = oldHash ? ctx.fileStore?.read(oldHash, false) : undefined
   if (oldContent && oldContent.equals(content)) return false
@@ -103,11 +105,13 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
       transaction?.commit()
 
       const file = getRealmFile(ctx, fileResult.hash) ?? ctx.files.write.create({ Hash: fileResult.hash })
-      const usages = [...skin.Files].map(usage => usage === existing ? { File: file, Filename: usage.Filename } : { File: usage.File, Filename: usage.Filename })
+      const usages = fileUsages.map((usage, index) => index === existingIndex
+        ? { File: file, Filename: usage.Filename }
+        : { File: usage.File, Filename: usage.Filename })
       if (!existing) usages.push({ File: file, Filename: 'skin.ini' })
       const name = document.general.name || skin.Name || ''
       const creator = document.general.author || skin.Creator || ''
-      if (existing) skin.Files[skin.Files.indexOf(existing)] = { File: file, Filename: existing.Filename }
+      if (existingIndex >= 0) skin.Files[existingIndex] = { File: file, Filename: existing!.Filename }
       else skin.Files.push({ File: file, Filename: 'skin.ini' })
       skin.Name = name
       skin.Creator = creator
@@ -116,6 +120,7 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
       return true
     })
     transaction?.finalize()
+    markChanged(ctx)
     if (oldHash) cleanupBlobIfUnreferenced(ctx, oldHash)
     return result
   } catch (error) {

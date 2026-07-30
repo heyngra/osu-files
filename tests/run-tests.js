@@ -25,6 +25,7 @@ for (const file of testFiles(join(root, 'tests'))) {
     '--import', setup,
     '--test',
     '--test-force-exit',
+    '--test-reporter', 'dot',
     relativeFile,
   ], { stdio: 'inherit' })
 
