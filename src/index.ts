@@ -51,6 +51,7 @@ import { parseOsr as parseOsrBinary, computeReplayMD5 } from './osr/parse.js'
 import type { ParsedReplay } from './osr/types.js'
 import type { Score } from './schema/types.js'
 import type { ImportedSkinData } from './skin/import.js'
+import { createIntegrityModule, type IntegrityModule, type IntegrityReport, type IntegrityIssue, computeSkinHash, fullSkinContentHash } from './integrity.js'
 
 export * from './schema/index.js'
 export { RollbackEntry, type RollbackOptions }
@@ -65,6 +66,11 @@ export { hasFilesFolder } from './context.js'
 export { BUILT_IN_SKINS, BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from './skin/constants.js'
 export type { ImportedSkinData } from './skin/import.js'
 export { cloneSkinIni, parseSkinIni, serializeSkinIni } from './skin/skin-ini.js'
+export { computeSkinHash, fullSkinContentHash }
+export type { IntegrityModule, IntegrityReport, IntegrityIssue }
+export type { OwnedFileEditor, SkinEditor } from './skins.js'
+export type { BeatmapSetEditor } from './sets.js'
+export type { ScoreEditor } from './scores.js'
 export type {
   SkinIni, SkinIniDocument, SkinIniNode, SkinIniLineNode, SkinIniEntryNode, SkinIniSectionNode,
   SkinIniParseIssue, SkinIniGeneral, SkinIniColours, SkinIniFonts, SkinIniCatchTheBeat,
@@ -134,6 +140,8 @@ export type OsuFilesAPI = {
   modpresets: ModPresetModule
   /** Beatmap metadata module for querying and writing metadata. */
   metadata: BeatmapMetadataModule
+  /** Safe integrity diagnostics and explicit conservative repair. */
+  integrity: IntegrityModule
   /** .osz beatmap archive operations. */
   osz: {
     /**
@@ -315,6 +323,8 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
   ctx.skins = skins
   ctx.sets = sets
   ctx.metadata = metadata
+  const integrity = createIntegrityModule(ctx)
+  ctx.integrity = integrity
 
   return {
     /** Guarded Realm access for advanced callers. */
@@ -353,6 +363,7 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
     modpresets: createModPresetModule(ctx),
     /** Beatmap metadata module for querying and writing metadata. */
     metadata,
+    integrity,
 
     /** .osz beatmap archive operations. */
     osz: {

@@ -16,6 +16,24 @@ export type FileCleanupReport = {
   failed: Array<{ hash: string; error: unknown }>
 }
 
+/** Returns a live File object for internal compound transactions. */
+export function getRealmFile(ctx: OsuFilesContext, hash: string): any {
+  return ctx.realm.objectForPrimaryKey<any>('File', hash)
+}
+
+/** Removes one replaced blob only when no owner still references it. */
+export function cleanupBlobIfUnreferenced(ctx: OsuFilesContext, hash: string): void {
+  if (!ctx.fileStore) return
+  for (const type of ['Skin', 'BeatmapSet', 'Score']) {
+    for (const owner of ctx.realm.objects<any>(type)) {
+      if ([...(owner.Files ?? [])].some(usage => usage.File?.Hash === hash)) return
+    }
+  }
+  const file = getRealmFile(ctx, hash)
+  if (file) writeRealm(ctx, () => ctx.realm.delete(file))
+  ctx.fileStore.remove(hash)
+}
+
 /**
  * Deletes file records and storage files no longer referenced by any set, skin, or score.
  * @returns Counts of candidates, removed files, missing files, and failures.

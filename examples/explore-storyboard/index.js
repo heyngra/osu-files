@@ -57,6 +57,8 @@ function showDetails(el) {
   const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
 
   try {
+    // Query results are detached snapshots; this example only inspects them.
+    // Use osu.sets.open(id) or osu.beatmap.save(...) for persisted edits.
     const sets = osu.sets.get.map(s => ({
       item: s,
       label: `${s.Beatmaps?.[0]?.Metadata?.Artist} - ${s.Beatmaps?.[0]?.Metadata?.Title} (#${s.OnlineID})`

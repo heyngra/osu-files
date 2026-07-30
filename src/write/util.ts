@@ -2,6 +2,7 @@ import type { OsuFilesContext } from '../context.js'
 import { assertWritable, markChanged, writeRealm } from '../context.js'
 import { snapshot, LogAction } from './logger.js'
 import { ValidationError, required, unique, resolveRef } from './validate.js'
+import { validateFileReference, normalizeFilename, computeSkinHash, computeBeatmapSetHash } from '../integrity.js'
 
 export type DeleteGuard = {
   /** Realm type name to check for backlinks. */
@@ -48,6 +49,32 @@ export type EntityConfig = {
  * })
  */
 export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig) {
+  const validateHashValue = (hash: unknown, label: string): void => {
+    if (typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash)) throw new ValidationError(`${label} must be a lowercase SHA-256 hash`)
+    if (ctx.filesFolderPath && !ctx.fileTransaction?.has(hash) && !ctx.fileStore?.verify(hash))
+      throw new ValidationError(`${label} does not refer to a verified stored blob`)
+  }
+  const validateFilesPatch = (files: unknown, hash: unknown): void => {
+    if (!Array.isArray(files)) throw new ValidationError(`${cfg.name}.Files must be an array`)
+    const seen = new Set<string>()
+    for (const usage of files as any[]) {
+      const filename = normalizeFilename(String(usage?.Filename ?? ''))
+      const key = filename.toLowerCase()
+      if (seen.has(key)) throw new ValidationError(`${cfg.name}.Files contains duplicate filename '${filename}'`)
+      seen.add(key)
+      validateFileReference(ctx, usage, cfg.name)
+    }
+    if (hash !== undefined) {
+      const expected = cfg.name === 'Skin'
+        ? computeSkinHash(ctx, files as any)
+        : cfg.name === 'BeatmapSet' ? computeBeatmapSetHash(ctx, files as any) : undefined
+      if (expected !== undefined && hash !== expected) throw new ValidationError(`${cfg.name}.Hash does not match its file content`)
+      if (cfg.name === 'Score') {
+        const replay = (files as any[]).find(file => /\.osr$/i.test(String(file?.Filename ?? '')))
+        if (replay?.File?.Hash !== hash) throw new ValidationError('Score.Hash must match its replay file')
+      }
+    }
+  }
   return {
     create(input: Record<string, unknown>): T {
       assertWritable(ctx)
@@ -62,6 +89,11 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig) {
       for (const f of cfg.strip ?? []) delete data[f]
       for (const [field, type] of Object.entries(cfg.fks ?? {}))
         if (field in input) data[field] = resolveRef(ctx.realm, type, input[field] as never)
+
+      if (cfg.name === 'File' && input.Hash !== undefined) validateHashValue(input.Hash, 'File.Hash')
+      if ((cfg.name === 'Skin' || cfg.name === 'BeatmapSet' || cfg.name === 'Score') && input.Files !== undefined)
+        validateFilesPatch(input.Files, input.Hash)
+      if (cfg.name === 'Beatmap' && input.Hash !== undefined) validateHashValue(input.Hash, 'Beatmap.Hash')
 
       if (ctx.checkHash && !ctx.filesFolderPath) throw new ValidationError(`Can't verify hash, no files folder set.`)
       
@@ -89,10 +121,17 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig) {
       for (const [field, type] of Object.entries(cfg.fks ?? {}))
         if (field in patch) data[field] = resolveRef(ctx.realm, type, patch[field] as never)
 
-      if (ctx.checkHash && ctx.filesFolderPath && patch.Hash) {
-        if (!ctx.fileStore?.verify(patch.Hash as string) && !ctx.fileTransaction?.has(patch.Hash as string))
-          throw new ValidationError(`File not found or invalid: ${patch.Hash}`)
+      if (cfg.name === 'File' && patch.Hash !== undefined)
+        throw new ValidationError('File.Hash is immutable; use db.files.put() and an owner editor')
+      if ((cfg.name === 'Skin' || cfg.name === 'BeatmapSet' || cfg.name === 'Score') && patch.Files !== undefined)
+        throw new ValidationError(`${cfg.name}.Files is protected; use its owner editor`)
+      if (cfg.name === 'Skin' || cfg.name === 'BeatmapSet') {
+        if (patch.Hash !== undefined) {
+          const expected = cfg.name === 'Skin' ? computeSkinHash(ctx, (existing as any).Files) : computeBeatmapSetHash(ctx, (existing as any).Files)
+          if (patch.Hash !== expected) throw new ValidationError(`${cfg.name}.Hash is derived from its files and cannot be assigned directly`)
+        }
       }
+      if (cfg.name === 'Beatmap' && patch.Hash !== undefined) validateHashValue(patch.Hash, 'Beatmap.Hash')
 
       writeRealm(ctx, () => {
         for (const key of Object.keys(data)) {

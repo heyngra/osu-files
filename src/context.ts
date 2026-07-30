@@ -14,6 +14,8 @@ import type { RulesetModule } from './rulesets.js'
 import type { RulesetSettingModule } from './rulesetsettings.js'
 import type { SkinModule } from './skins.js'
 import type { BeatmapMetadataModule } from './metadata.js'
+import type { IntegrityModule } from './integrity.js'
+import { computeSkinHash, computeBeatmapSetHash, validateOwnerHashes } from './integrity.js'
 
 /**
  * Shared context passed to all modules.
@@ -40,6 +42,7 @@ export type OsuFilesContext = {
   rulesetSettings: RulesetSettingModule
   skins: SkinModule
   metadata: BeatmapMetadataModule
+  integrity: IntegrityModule
 }
 
 /**
@@ -74,10 +77,37 @@ export function registerContextGeneration(ctx: OsuFilesContext): void {
   registerRealmGeneration(ctx.realm, () => ctx.queryGeneration.value, () => ctx.queryGeneration.value++)
   registerRealmEditHooks(ctx.realm, {
     snapshot,
+    validate: (realm, entity, primaryKey) => {
+      if (entity === 'Skin' || entity === 'BeatmapSet' || entity === 'Score') {
+        const owner = realm.objectForPrimaryKey<any>(entity, primaryKey as never)
+        if (owner) {
+          validateOwnerHashes(ctx, owner)
+        }
+      }
+    },
     log: (entity, _action, primaryKey, before, after) => ctx.logger.log(entity, LogAction.Update, primaryKey, before, after),
   })
   registerRealmWriteHooks(ctx.realm, {
     assertWritable: () => assertWritable(ctx),
+    validate: (entity, item, patch) => {
+      if (entity === 'File' && patch.Hash !== undefined)
+        throw new Error('File.Hash is immutable; use db.files.put() and an owner editor')
+      if ((entity === 'Skin' || entity === 'BeatmapSet' || entity === 'Score') && patch.Files !== undefined)
+        throw new Error(`${entity}.Files is protected; use its owner editor`)
+      if ((entity === 'Skin' || entity === 'BeatmapSet') && patch.Hash !== undefined) {
+        const files = (item as any).Files
+        const expected = entity === 'Skin' ? computeSkinHash(ctx, files) : computeBeatmapSetHash(ctx, files)
+        if (patch.Hash !== expected) throw new Error(`${entity}.Hash is derived from its files and cannot be assigned directly`)
+      }
+      if (entity === 'Beatmap' && patch.Hash !== undefined) {
+        if (typeof patch.Hash !== 'string' || !/^[a-f0-9]{64}$/.test(patch.Hash) || (ctx.filesFolderPath && !ctx.fileStore?.verify(patch.Hash)))
+          throw new Error('Beatmap.Hash must refer to a verified .osu blob')
+      }
+      if (entity === 'Score' && patch.Hash !== undefined) {
+        const replay = [...((item as any).Files ?? [])].find((file: any) => /\.osr$/i.test(file.Filename ?? ''))
+        if (replay?.File?.Hash !== patch.Hash) throw new Error('Score.Hash must match its replay file')
+      }
+    },
     snapshot: (entity, pk) => snapshot(ctx.realm, entity, pk),
     log: (entity, action, pk, before, after) => ctx.logger.log(entity, action === 'delete' ? LogAction.Delete : LogAction.Update, pk, before, after),
   })

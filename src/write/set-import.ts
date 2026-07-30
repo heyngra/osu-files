@@ -49,8 +49,8 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
-  if (onlineID > 0) existingSet = ctx.sets.get.byOnlineIdExact(onlineID)[0] ?? null
-  if (!existingSet && setHash) existingSet = ctx.sets.get.byHashEquals(setHash)[0] ?? null
+  if (onlineID > 0) existingSet = ctx.sets.get.live().byOnlineIdExact(onlineID)[0] ?? null
+  if (!existingSet && setHash) existingSet = ctx.sets.get.live().byHashEquals(setHash)[0] ?? null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
   const previousBeatmaps = existingSet
@@ -99,10 +99,11 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
       Protected: isProtected,
     })
   } else {
-    ctx.sets.write.update(setUUID, {
-      OnlineID: onlineID,
-      Hash: setHash,
-      Files: namedFileEntries,
+    writeRealm(ctx, () => {
+      existingSet!.OnlineID = onlineID
+      existingSet!.Hash = setHash
+      existingSet!.Files.splice(0, existingSet!.Files.length)
+      for (const usage of namedFileEntries) existingSet!.Files.push(usage)
     })
     beatmapSet = existingSet
   }

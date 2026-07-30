@@ -126,19 +126,22 @@ export class EditSession<T> implements Iterable<T> {
   commit(): void {
     if (this.closed) return
     if (this.changes.size > 0) {
+      const changedRoots = this.rootList.filter(root => [...this.changes].some(([target]) => this.roots.get(target)?.includes(root)))
       const apply = () => {
         for (const [target, objectChanges] of this.changes) {
           for (const [property, value] of objectChanges)
             Reflect.set(target, property, value)
+        }
+        if (this.options?.entity && this.options.hooks) {
+          for (const root of changedRoots)
+            this.options.hooks.validate?.(this.realm, this.options.entity, root.primaryKey)
         }
       }
       const realm = this.realm as Realm & { isInTransaction?: boolean }
       if (realm.isInTransaction) apply()
       else realm.write(apply)
       if (this.options?.entity && this.options.hooks) {
-        for (const root of this.rootList) {
-          const changed = [...this.changes].some(([target]) => this.roots.get(target)?.includes(root))
-          if (!changed) continue
+        for (const root of changedRoots) {
           const after = this.options.hooks.snapshot(this.realm, this.options.entity, root.primaryKey)
           this.options.hooks.log(this.options.entity, 'update', root.primaryKey, root.before, after)
         }

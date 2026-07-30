@@ -7,11 +7,41 @@ import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { importOskEntries, type ImportedSkinData } from './skin/import.js'
 import { exportOskData } from './skin/export.js'
-import { cleanupOrphanedFiles } from './files.js'
+import { cleanupOrphanedFiles, cleanupBlobIfUnreferenced, getRealmFile } from './files.js'
 import { assertWritable, writeRealm } from './context.js'
 import { cloneSkinIni, parseSkinIni, serializeSkinIni, type SkinIniDocument } from './skin/skin-ini.js'
-import { fileStoragePath, sha256 } from './util.js'
-import type { FileStoreTransaction } from './file-store.js'
+import { fileStoragePath } from './util.js'
+import { computeSkinHash, fullSkinContentHash, normalizeFilename, validateOwnerHashes } from './integrity.js'
+
+export type OwnedFileEditor = {
+  /** Normalized owner-local filename. */
+  readonly filename: string
+  /** Hash of the blob selected when this editor was opened. */
+  readonly hash: string
+  /** Reads and verifies the selected blob. */
+  read(): Buffer
+  /** Replaces the selected blob for this owner using copy-on-write. */
+  replace(content: Buffer): Promise<boolean>
+  /** Transforms and replaces the selected blob atomically. */
+  edit(transform: (content: Buffer) => Buffer | Promise<Buffer>): Promise<boolean>
+}
+
+export type SkinEditor = {
+  /** Skin UUID. */
+  readonly id: string
+  /** Detached skin snapshot. */
+  readonly value: Readonly<Skin>
+  /** Opens one file reference for copy-on-write editing. */
+  getFile(filename: string): OwnedFileEditor
+  /** Reads this skin's skin.ini, if present. */
+  readIni(): SkinIniDocument | undefined
+  /** Replaces this skin's skin.ini atomically. */
+  replaceIni(source: string | SkinIniDocument): Promise<boolean>
+  /** Applies edits to a cloned skin.ini document. */
+  editIni(edit: (document: SkinIniDocument) => void): Promise<boolean>
+  /** Computes a non-persisted hash over every referenced skin file. */
+  contentHash(): string
+}
 
 function getNextBestSkinName(existingNames: Iterable<string>, desiredName: string): string {
   const taken = new Set<number>()
@@ -30,7 +60,7 @@ function getNextBestSkinName(existingNames: Iterable<string>, desiredName: strin
 }
 
 function getSkin(ctx: OsuFilesContext, get: SkinQuery['proxify'] extends never ? never : ReturnType<SkinQuery['proxify']>, skinId: string): Skin {
-  const skin = get.byId(skinId)[0]
+  const skin = ctx.realm.objectForPrimaryKey<Skin>('Skin', new Realm.BSON.UUID(skinId))
   if (!skin) throw new Error(`Skin '${skinId}' not found`)
   return skin
 }
@@ -47,17 +77,8 @@ function readIniDocument(ctx: OsuFilesContext, skin: Skin): SkinIniDocument | un
   return parseSkinIni(readFileSync(fileStoragePath(ctx.filesFolderPath, hash), 'utf8'))
 }
 
-function skinHash(ctx: OsuFilesContext, usages: RealmNamedFileUsage[], transaction?: FileStoreTransaction): string {
-  if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required')
-  const hashable = usages
-    .filter(usage => usage.Filename && /\.(?:ini|json)$/i.test(usage.Filename))
-    .sort((a, b) => (a.Filename ?? '').localeCompare(b.Filename ?? ''))
-  const buffers = hashable.map(usage => {
-    const hash = usage.File?.Hash
-    if (!hash) return Buffer.alloc(0)
-    return transaction?.read(hash) ?? ctx.fileStore!.read(hash)
-  })
-  return buffers.length ? sha256(Buffer.concat(buffers)) : ''
+function skinHash(ctx: OsuFilesContext, usages: RealmNamedFileUsage[]): string {
+  return computeSkinHash(ctx, usages)
 }
 
 function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument, skinQuery: SkinQuery, update: (id: unknown, patch: Record<string, unknown>) => Skin): boolean {
@@ -67,7 +88,8 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
 
   const content = Buffer.from(serializeSkinIni(document), 'utf8')
   const existing = iniUsage(skin)
-  const oldContent = existing?.File?.Hash ? ctx.fileStore?.read(existing.File.Hash, false) : undefined
+  const oldHash = existing?.File?.Hash
+  const oldContent = oldHash ? ctx.fileStore?.read(oldHash, false) : undefined
   if (oldContent && oldContent.equals(content)) return false
 
   const transaction = ctx.fileStore?.beginTransaction()
@@ -80,20 +102,21 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
       if (!fileResult) throw new Error('File store is unavailable')
       transaction?.commit()
 
-      const file = ctx.files.get.byHashEquals(fileResult.hash)[0] ?? ctx.files.write.create({ Hash: fileResult.hash })
+      const file = getRealmFile(ctx, fileResult.hash) ?? ctx.files.write.create({ Hash: fileResult.hash })
       const usages = [...skin.Files].map(usage => usage === existing ? { File: file, Filename: usage.Filename } : { File: usage.File, Filename: usage.Filename })
       if (!existing) usages.push({ File: file, Filename: 'skin.ini' })
       const name = document.general.name || skin.Name || ''
       const creator = document.general.author || skin.Creator || ''
-      skin.Files.splice(0, skin.Files.length)
-      for (const usage of usages) skin.Files.push(usage)
+      if (existing) skin.Files[skin.Files.indexOf(existing)] = { File: file, Filename: existing.Filename }
+      else skin.Files.push({ File: file, Filename: 'skin.ini' })
       skin.Name = name
       skin.Creator = creator
-      skin.Hash = skinHash(ctx, usages, transaction)
-      update(skin.ID, { Files: usages, Name: name, Creator: creator, Hash: skin.Hash })
+      skin.Hash = skinHash(ctx, usages)
+      validateOwnerHashes(ctx, { ...skin, Files: usages, Hash: skin.Hash } as Skin)
       return true
     })
     transaction?.finalize()
+    if (oldHash) cleanupBlobIfUnreferenced(ctx, oldHash)
     return result
   } catch (error) {
     try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
@@ -116,6 +139,80 @@ export function createSkinModule(ctx: OsuFilesContext) {
   return {
     get,
     write,
+
+    /**
+     * Opens a skin for safe copy-on-write file editing.
+     *
+     * @param skinId - Skin UUID.
+     * @returns An editor whose mutations are committed atomically.
+     * @throws If the skin does not exist or the database is closed.
+     * @example
+     * const editor = db.skins.open(skinId)
+     * await editor.getFile('button-left.png').edit(transform)
+     */
+    open: (skinId: string): SkinEditor => {
+      const skin = getSkin(ctx, get, skinId)
+      const value = { ...skin, Files: [...skin.Files].map(file => ({ Filename: file.Filename, File: file.File ? { Hash: file.File.Hash } : undefined })) } as unknown as Readonly<Skin>
+      return {
+        id: skinId,
+        value,
+        getFile(filename: string): OwnedFileEditor {
+          const normalized = normalizeFilename(filename).toLowerCase()
+          const usage = [...skin.Files].find(file => normalizeFilename(file.Filename ?? '').toLowerCase() === normalized)
+          if (!usage?.File?.Hash) throw new Error(`Skin '${skinId}' file '${filename}' not found`)
+          const originalHash = usage.File.Hash
+          const replace = async (content: Buffer): Promise<boolean> => {
+            assertWritable(ctx)
+            if (skin.Protected) throw new Error(`Cannot modify protected skin '${skin.Name}'`)
+            const transaction = ctx.fileStore?.beginTransaction()
+            const checkpoint = ctx.logger.checkpoint()
+            const previousTransaction = ctx.fileTransaction
+            ctx.fileTransaction = transaction
+            try {
+              const result = writeRealm(ctx, () => {
+                const stored = transaction?.put(content) ?? ctx.fileStore?.put(content)
+                if (!stored) throw new Error('File store is unavailable')
+                if (stored.hash === originalHash) return false
+                const existingFile = getRealmFile(ctx, stored.hash) ?? ctx.files.write.create({ Hash: stored.hash })
+                const next = [...skin.Files].map(item => item === usage ? { Filename: item.Filename, File: existingFile } : { Filename: item.Filename, File: item.File })
+                transaction?.commit()
+                skin.Files[skin.Files.indexOf(usage)] = { File: existingFile, Filename: usage.Filename }
+                skin.Hash = skinHash(ctx, next)
+                validateOwnerHashes(ctx, { ...skin, Files: next, Hash: skin.Hash } as Skin)
+                return true
+              })
+              transaction?.finalize()
+              cleanupBlobIfUnreferenced(ctx, originalHash)
+              return result
+            } catch (error) {
+              try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
+              throw error
+            } finally { ctx.fileTransaction = previousTransaction }
+          }
+          const editor: OwnedFileEditor = {
+            filename: usage.Filename ?? filename,
+            hash: originalHash,
+            read: () => {
+              if (!ctx.fileStore) throw new Error('filesFolderPath is required')
+              return ctx.fileStore.read(originalHash)
+            },
+            replace,
+            edit: async transform => replace(await transform(editor.read())),
+          }
+          return editor
+        },
+        readIni: () => readIniDocument(ctx, skin),
+        replaceIni: async source => persistIni(ctx, skin, typeof source === 'string' ? parseSkinIni(source) : cloneSkinIni(source), skinQuery, write.update),
+        editIni: async edit => {
+          const document = readIniDocument(ctx, skin) ?? parseSkinIni('')
+          const original = serializeSkinIni(document)
+          edit(document)
+          if (serializeSkinIni(document) === original) return false
+          return persistIni(ctx, skin, document, skinQuery, write.update)
+        },
+        contentHash: () => fullSkinContentHash(ctx, skin),
+      }
+    },
 
     /**
      * Reads and parses a skin's `skin.ini` file.
@@ -181,7 +278,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
 
           const namedFiles: RealmNamedFileUsage[] = []
           for (const entry of data.entries) {
-            let file = ctx.files.get.byHashEquals(entry.hash)[0]
+            let file = getRealmFile(ctx, entry.hash)
             if (!file) file = ctx.files.write.create({ Hash: entry.hash })
             namedFiles.push({ File: file, Filename: entry.filename })
           }
@@ -246,7 +343,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
 
       const namedFiles: RealmNamedFileUsage[] = []
       for (const f of source.Files) {
-        const file: RealmFile | undefined = f.File
+        const file: RealmFile | undefined = f.File?.Hash ? getRealmFile(ctx, f.File.Hash) : undefined
         if (file) namedFiles.push({ File: file, Filename: f.Filename })
       }
 
@@ -255,7 +352,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
         Name: newName,
         Creator: source.Creator || '',
         InstantiationInfo: source.InstantiationInfo || '',
-        Hash: '',
+        Hash: skinHash(ctx, namedFiles),
         Protected: false,
         DeletePending: false,
         Files: namedFiles,

@@ -16,6 +16,7 @@ import { StoryboardSprite, StoryboardSample } from './storyboard/elements.js'
 import type { StoryboardElementSource } from './storyboard/types.js'
 import { md5, sha256, fileStoragePath, normalizeFilename } from '../util.js'
 import { assertWritable } from '../context.js'
+import { getRealmFile } from '../files.js'
 
 /** Creates a validated file reference from a hash or in-memory content.
  * @example
@@ -66,7 +67,7 @@ function mergeOsbContent(target: Storyboard, source: Storyboard, sourceType: Sto
 export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string): OsuBeatmap | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const beatmap = ctx.beatmaps.get.byId(beatmapId)[0]
+  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0]
   if (!beatmap) return undefined
 
   const hash = beatmap.Hash ?? ''
@@ -122,7 +123,7 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
 export function realmSetToBeatmapSetData(ctx: OsuFilesContext, setId: string): BeatmapSetData | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const set = ctx.sets.get.byId(setId)[0]
+  const set = ctx.sets.get.live().byId(setId)[0]
   if (!set) return undefined
 
   const files: BeatmapSetFile[] = []
@@ -172,14 +173,14 @@ function autoRegisterFileRefs(ctx: OsuFilesContext, setFiles: RealmNamedFileUsag
       hash = sha256(ref.content)
       if (!ctx.fileStore?.verify(hash) && !ctx.fileTransaction?.has(hash))
         ctx.fileTransaction?.put(ref.content, hash) ?? ctx.fileStore?.put(ref.content, hash)
-      if (!ctx.files.get.byHashEquals(hash)[0]) {
+      if (!getRealmFile(ctx, hash)) {
         ctx.files.write.upsert({ Hash: hash })
       }
       ref.hash = hash
     }
 
     if (hash) {
-      let fileObj = ctx.files.get.byHashEquals(hash)[0]
+      let fileObj = getRealmFile(ctx, hash)
       if (!fileObj) {
         const storePath = fileStoragePath(ctx.filesFolderPath!, hash)
         if (!existsSync(storePath)) throw new Error(`File '${ref.filename}' with hash ${hash} is not stored`)
@@ -226,7 +227,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
   assertWritable(ctx)
 
   const beatmapId = new Realm.BSON.UUID(beatmapIdStr)
-  const beatmap = ctx.beatmaps.get.byId(beatmapId)[0]
+  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0]
   if (!beatmap) throw new Error(`Beatmap '${beatmapIdStr}' not found`)
 
   // Validate every file ref in the storyboard
@@ -254,7 +255,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
 
   transaction?.put(newBuffer, newHash) ?? ctx.fileStore?.put(newBuffer, newHash)
 
-  if (!ctx.files.get.byHashEquals(newHash)[0]) {
+  if (!getRealmFile(ctx, newHash)) {
     ctx.files.write.upsert({ Hash: newHash })
   }
 
@@ -297,11 +298,11 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
     }
   })
 
-  const freshBeatmap = ctx.beatmaps.get.byId(beatmapId)[0]
+  const freshBeatmap = ctx.beatmaps.get.live().byId(beatmapId)[0]
   if (freshBeatmap?.BeatmapSet) {
     const setObj = freshBeatmap.BeatmapSet
     const setPk = setObj.ID instanceof Realm.BSON.UUID ? setObj.ID : new Realm.BSON.UUID(String(setObj.ID))
-    const setCopy = ctx.sets.get.byId(setPk)[0]
+    const setCopy = ctx.sets.get.live().byId(setPk)[0]
     if (setCopy) {
       const setFiles = setCopy.Files
 
@@ -312,7 +313,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
       const usage = setFiles.find(fu => fu.File?.Hash === oldHash)
         ?? setFiles.find((fu: any) => fu.Filename === filename)
       if (usage) {
-        writeRealm(ctx, () => { usage.File = ctx.files.get.byHashEquals(newHash)[0] })
+        writeRealm(ctx, () => { usage.File = getRealmFile(ctx, newHash) })
       }
 
       if (modified.storyboard && modified.storyboard._dirty) {
@@ -343,10 +344,10 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
           if (!existsSync(osbPath)) {
             transaction?.put(Buffer.from(osbContent, 'utf-8'), osbHash) ?? ctx.fileStore?.put(Buffer.from(osbContent, 'utf-8'), osbHash)
           }
-          if (!ctx.files.get.byHashEquals(osbHash)[0]) {
+          if (!getRealmFile(ctx, osbHash)) {
             ctx.files.write.upsert({ Hash: osbHash })
           }
-          const osbFile = ctx.files.get.byHashEquals(osbHash)[0]
+          const osbFile = getRealmFile(ctx, osbHash)
           const usage = setFiles.find(f => f.Filename === osbFilename)
           if (usage) {
             writeRealm(ctx, () => { usage.File = osbFile })

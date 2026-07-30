@@ -7,11 +7,13 @@ import '../disposable.js'
 
 export type RealmEditHooks = {
   snapshot(realm: Realm, entity: string, primaryKey: unknown): Record<string, unknown> | null
+  validate?(realm: Realm, entity: string, primaryKey: unknown): void
   log(entity: string, action: 'update', primaryKey: unknown, before: unknown, after: unknown): void
 }
 
 export type RealmWriteHooks = {
   assertWritable(): void
+  validate?(entity: string, item: unknown, patch: Record<string, unknown>): void
   snapshot(entity: string, pk: unknown): Record<string, unknown> | null
   log(entity: string, action: 'update' | 'delete', pk: unknown, before: unknown, after: unknown): void
 }
@@ -27,6 +29,28 @@ export type WriteOps<T> = {
 /** A materialised query result with the same snapshot semantics as the array-like API. */
 export type QuerySnapshot<T> = T[]
 
+function detach(value: unknown, seen = new Map<object, unknown>(), depth = 0): any {
+  if (value === null || typeof value !== 'object') return value
+  if (depth > 6) return undefined
+  if (value instanceof Date) return new Date(value.getTime())
+  if (Buffer.isBuffer(value)) return Buffer.from(value)
+  if (value instanceof Realm.BSON.UUID) return new Realm.BSON.UUID(value.toString())
+  if (seen.has(value)) return seen.get(value)
+  if (Array.isArray(value) || typeof (value as any).length === 'number') {
+    const result: unknown[] = []
+    seen.set(value, result)
+    for (const item of value as Iterable<unknown>) result.push(detach(item, seen, depth + 1))
+    return result
+  }
+  const result: Record<string, unknown> = {}
+  seen.set(value, result)
+  for (const key of Object.keys(value)) {
+    if ((key === 'BeatmapSet' || key === 'BeatmapInfo') && depth > 0) continue
+    result[key] = detach((value as any)[key], seen, depth + 1)
+  }
+  return result
+}
+
 export abstract class EntityQuery<T> {
   private _preds: string[] = []
   private _args: unknown[] = []
@@ -37,6 +61,7 @@ export abstract class EntityQuery<T> {
   private _editing = false
   private _editSession: EditSession<T> | null = null
   private _limit?: number
+  private _detached = true
 
   /** Cache the result after first terminal access. @default true */
   enableCache = true
@@ -91,7 +116,7 @@ export abstract class EntityQuery<T> {
   first(): T | undefined {
     if (this._realm.isClosed) throw new RealmClosedError()
     const results = this._resultsCore(true)
-    return results.length > 0 ? results[0] : undefined
+    return results.length > 0 ? (this._detached ? detach(results[0]) : results[0]) : undefined
   }
 
   /** Materialises the query into a detached JavaScript array snapshot.
@@ -109,6 +134,13 @@ export abstract class EntityQuery<T> {
   /** Discards all buffered edits without writing to Realm. */
   rollback(): void {
     this._editSession?.rollback()
+  }
+
+  /** Uses live Realm objects for an explicitly advanced query. */
+  live(): this & T[] {
+    const q = this._clone()
+    q._detached = false
+    return q
   }
 
   [Symbol.dispose](): void {
@@ -162,6 +194,7 @@ export abstract class EntityQuery<T> {
         if (items.length === 0) return 0
         const data: Record<string, unknown> = { ...patch }
         for (const f of cfg.strip ?? []) delete data[f]
+        for (const item of items) hooks.validate?.(cfg.name, item, data)
         const snapshots = items.map(item => ({
           id: (item as any)[cfg.pk],
           before: hooks.snapshot(cfg.name, (item as any)[cfg.pk]),
@@ -290,11 +323,12 @@ export abstract class EntityQuery<T> {
       })
       return this._editSession.map(value => value)
     }
+    const output = this._detached ? arr.map(item => detach(item)) : arr
     if (this.enableCache && this._preds.length > 0) {
-      this._cached = arr
+      this._cached = output
       this._cachedGeneration = generation
     }
-    return arr
+    return output
   }
 
   private _clone(): this & T[] {

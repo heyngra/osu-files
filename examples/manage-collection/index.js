@@ -37,6 +37,8 @@ function buildMd5Map(osu) {
       const col = osu.collections.get.byNameEquals(name)[0]
       if (!col) { console.log(`'${name}' not found.`); continue }
 
+      // `col` is a detached snapshot. Collection mutations go through the module API.
+
       const md5map = buildMd5Map(osu)
       const hashes = col.BeatmapMD5Hashes.filter(h => h)
 

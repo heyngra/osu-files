@@ -11,6 +11,7 @@ import type { LegacyScoreAttributes, LegacyBeatmapConversionDifficultyInfo } fro
 import { computeLegacyScoreAttributes, convertFromLegacyTotalScore, roundHalfEven } from './legacy-conversion.js'
 import type { Score, Beatmap, RealmUser, RealmNamedFileUsage } from '../schema/types.js'
 import { assertWritable, writeRealm } from '../context.js'
+import { getRealmFile } from '../files.js'
 
 /**
  * Options for importing an .osr replay into Realm.
@@ -210,14 +211,14 @@ function prepareScore(
   }
 
   const hash = sha256(buffer)
-  const beatmap = parsed.beatmapMD5 ? ctx.beatmaps.get.byMd5Equals(parsed.beatmapMD5)[0] : undefined
+  const beatmap = parsed.beatmapMD5 ? ctx.beatmaps.get.live().byMd5Equals(parsed.beatmapMD5)[0] : undefined
   if (!beatmap) {
     if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
     if (!suppressWarning) console.warn(`[osu-files] Beatmap '${parsed.beatmapMD5}' not found in realm, importing score without beatmap reference`)
   }
 
   const shortName = MODE_SHORTNAME[parsed.mode]
-  const ruleset = shortName ? ctx.rulesets.get.byShortNameEquals(shortName)[0] : undefined
+  const ruleset = shortName ? ctx.rulesets.get.live().byShortNameEquals(shortName)[0] : undefined
   const acc = accuracy(parsed)
   const modsStr = buildMods(parsed)
   let { totalScore, totalScoreWithoutMods } = computeStandardisedScore(parsed, modsStr, ctx, beatmap, options)
@@ -327,11 +328,11 @@ function importOsrBuffer(ctx: OsuFilesContext, buffer: Buffer, options?: OsrImpo
     writeRealm(ctx, () => {
       fileTransaction?.put(buffer, hash)
       fileTransaction?.commit()
-      if (!ctx.files.get.byHashEquals(hash)[0]) {
+      if (!getRealmFile(ctx, hash)) {
         ctx.files.write.upsert({ Hash: hash })
       }
 
-      const fileObj = ctx.files.get.byHashEquals(hash)[0]
+      const fileObj = getRealmFile(ctx, hash)
       const files: RealmNamedFileUsage[] = fileObj ? [{ File: fileObj, Filename: 'replay.osr' }] : []
 
       ctx.scores.write.create({

@@ -5,6 +5,7 @@ import readline from 'node:readline/promises'
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
 const ask = (q) => rl.question(q).then(a => a.replace(/^["']|["']$/g, '').trim())
+const sha256 = (content) => createHash('sha256').update(content).digest('hex')
 
 ;(async () => {
   const realmPath = await ask("osu!lazer client.realm: ")

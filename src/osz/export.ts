@@ -5,6 +5,7 @@ import { serializeOsu } from '../beatmap/serialize.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from './types.js'
 import { fileStoragePath, promoteFile, temporaryFilePath } from '../util.js'
+import { validateOwnerHashes } from '../integrity.js'
 
 /** Options for beatmap set export. */
 export type ExportOptions = {
@@ -49,6 +50,7 @@ export async function exportOsz(
 
   const set = ctx.sets.get.byId(setID)[0]
   if (!set) throw new Error(`BeatmapSet '${setID}' not found`)
+  validateOwnerHashes(ctx, set)
 
   const zip = new ZipFile()
 

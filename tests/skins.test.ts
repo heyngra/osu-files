@@ -242,11 +242,11 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
     assert.strictEqual(osu.skins.get.usable().length, 4)
 
     osu.skins.delete(String(skin.ID))
-    assert.strictEqual(skin.DeletePending, true)
+    assert.strictEqual(osu.skins.get.byId(String(skin.ID))[0].DeletePending, true)
     assert.strictEqual(osu.skins.get.usable().length, 3)
 
     osu.skins.undelete(String(skin.ID))
-    assert.strictEqual(skin.DeletePending, false)
+    assert.strictEqual(osu.skins.get.byId(String(skin.ID))[0].DeletePending, false)
     assert.strictEqual(osu.skins.get.usable().length, 4)
 
     osu.close()
@@ -283,7 +283,10 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
     assert.strictEqual(osu.skins.get.byCreatorContains('CYPERDARK').length, 1)
 
     const skin = osu.skins.get[0]
-    const foundName = osu.skins.get.byNameContains(skin.Name!.substring(0, 10))
+    const originalName = skin.Name
+    skin.Name = 'Detached mutation'
+    assert.strictEqual(osu.skins.get.byId(String(skin.ID))[0].Name, originalName)
+    const foundName = osu.skins.get.byNameContains(originalName!.substring(0, 10))
     assert.strictEqual(foundName.length, 1)
 
     assert.strictEqual(osu.skins.get.withFile('cursor.png').length, 1)

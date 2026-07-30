@@ -5,6 +5,7 @@ import { fileStoragePath } from '../util.js'
 import { writeFileAtomic } from '../util.js'
 import { dateToTicks, writeString, parseOsr, computeReplayMD5 } from './parse.js'
 import { SHORTNAME_TO_MODE, MOD_ACRONYM_TO_FLAG } from './types.js'
+import { validateOwnerHashes } from '../integrity.js'
 
 function parseMods(modsStr: string | undefined | null): number {
   if (!modsStr) return 0
@@ -54,6 +55,7 @@ export function exportOsr(ctx: OsuFilesContext, scoreId: string, outputPath: str
 
   const score = ctx.scores.get.byId(scoreId)[0]
   if (!score) throw new Error(`Score '${scoreId}' not found`)
+  validateOwnerHashes(ctx, score)
 
   writeFileAtomic(outputPath, toBuffer(ctx, score))
 }

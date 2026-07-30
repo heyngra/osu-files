@@ -7,9 +7,25 @@ import { createCrud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { importSet as importSetFn, type ImportSetInput } from './write/set-import.js'
 import type { BeatmapSetData } from './osz/types.js'
-import { cleanupOrphanedFiles } from './files.js'
+import { cleanupOrphanedFiles, cleanupBlobIfUnreferenced, getRealmFile } from './files.js'
 import { sha256, fileStoragePath } from './util.js'
 import { assertWritable, markChanged, writeRealm } from './context.js'
+import type { OwnedFileEditor } from './skins.js'
+import { computeBeatmapSetHash, normalizeFilename, validateOwnerHashes } from './integrity.js'
+import { md5 } from './util.js'
+
+function getSet(ctx: OsuFilesContext, setId: string): BeatmapSet | undefined {
+  return ctx.realm.objectForPrimaryKey<BeatmapSet>('BeatmapSet', new Realm.BSON.UUID(setId)) ?? undefined
+}
+
+export type BeatmapSetEditor = {
+  /** Beatmap-set UUID. */
+  readonly id: string
+  /** Detached beatmap-set snapshot. */
+  readonly value: Readonly<BeatmapSet>
+  /** Opens one set file for copy-on-write editing. */
+  getFile(filename: string): OwnedFileEditor
+}
 
 /**
  * Creates the beatmap set sub-module with query, write, import, and delete operations.
@@ -24,9 +40,77 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
   return {
     get,
     write,
+    /**
+     * Opens a beatmap set for safe copy-on-write file editing.
+     *
+     * @param setId - Beatmap-set UUID.
+     * @returns An editor whose changes update dependent hashes atomically.
+     * @throws If the set does not exist, is read-only, or a file is invalid.
+     * @example
+     * await db.sets.open(setId).getFile('background.jpg').edit(transform)
+     */
+    open: (setId: string): BeatmapSetEditor => {
+      const set = getSet(ctx, setId)
+      if (!set) throw new Error(`BeatmapSet '${setId}' not found`)
+      const value = { ...set, Files: [...set.Files].map(file => ({ Filename: file.Filename, File: file.File ? { Hash: file.File.Hash } : undefined })) } as unknown as Readonly<BeatmapSet>
+      return {
+        id: setId,
+        value,
+        getFile(filename: string): OwnedFileEditor {
+          const normalized = normalizeFilename(filename).toLowerCase()
+          const usage = [...set.Files].find(file => normalizeFilename(file.Filename ?? '').toLowerCase() === normalized)
+          if (!usage?.File?.Hash) throw new Error(`BeatmapSet '${setId}' file '${filename}' not found`)
+          const originalHash = usage.File.Hash
+          const replace = async (content: Buffer): Promise<boolean> => {
+            assertWritable(ctx)
+            const transaction = ctx.fileStore?.beginTransaction()
+            const checkpoint = ctx.logger.checkpoint()
+            const previousTransaction = ctx.fileTransaction
+            ctx.fileTransaction = transaction
+            try {
+              const result = writeRealm(ctx, () => {
+                const stored = transaction?.put(content) ?? ctx.fileStore?.put(content)
+                if (!stored) throw new Error('File store is unavailable')
+                if (stored.hash === originalHash) return false
+                const file = getRealmFile(ctx, stored.hash) ?? ctx.files.write.create({ Hash: stored.hash })
+                const next = [...set.Files].map(item => item === usage ? { Filename: item.Filename, File: file } : { Filename: item.Filename, File: item.File })
+                const beatmap = set.Beatmaps.find(item => item.Hash === originalHash)
+                if (beatmap && /\.osu$/i.test(usage.Filename ?? '')) {
+                  beatmap.Hash = stored.hash
+                  beatmap.MD5Hash = md5(content)
+                }
+                transaction?.commit()
+                set.Files[set.Files.indexOf(usage)] = { File: file, Filename: usage.Filename }
+                set.Hash = computeBeatmapSetHash(ctx, next)
+                validateOwnerHashes(ctx, set)
+                ctx.sets.write.update(set.ID, { Hash: set.Hash })
+                return true
+              })
+              transaction?.finalize()
+              cleanupBlobIfUnreferenced(ctx, originalHash)
+              return result
+            } catch (error) {
+              try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
+              throw error
+            } finally { ctx.fileTransaction = previousTransaction }
+          }
+          const editor: OwnedFileEditor = {
+            filename: usage.Filename ?? filename,
+            hash: originalHash,
+            read: () => {
+              if (!ctx.fileStore) throw new Error('filesFolderPath is required')
+              return ctx.fileStore.read(originalHash)
+            },
+            replace,
+            edit: async transform => replace(await transform(editor.read())),
+          }
+          return editor
+        },
+      }
+    },
     importSet: (data: ImportSetInput): BeatmapSetData => importSetFn(ctx, data),
     delete: (setId: string): void => {
-      const set = get.byId(setId)[0]
+      const set = getSet(ctx, setId)
       if (!set) throw new Error(`BeatmapSet '${setId}' not found`)
       write.update(set.ID, { DeletePending: true })
       cleanupOrphanedFiles(ctx)
@@ -35,7 +119,8 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
     addFile(setId: string, filename: string, content: Buffer): FileRef {
       if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required')
       assertWritable(ctx)
-      const set = get.byId(setId)[0]
+      const normalizedFilename = normalizeFilename(filename)
+      const set = getSet(ctx, setId)
       if (!set) throw new Error(`BeatmapSet '${setId}' not found`)
       const transaction = ctx.fileStore?.beginTransaction()
       const checkpoint = ctx.logger.checkpoint()
@@ -45,15 +130,19 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
         const hash = transaction?.put(content).hash ?? ctx.fileStore?.put(content).hash ?? sha256(content)
         writeRealm(ctx, () => {
           transaction?.commit()
-          if (!ctx.files.get.byHashEquals(hash)[0]) {
+          if (!getRealmFile(ctx, hash)) {
             ctx.files.write.upsert({ Hash: hash })
           }
-          const fu = { File: ctx.files.get.byHashEquals(hash)[0]!, Filename: filename }
+          if (set.Files.some(file => normalizeFilename(file.Filename ?? '').toLowerCase() === normalizedFilename.toLowerCase()))
+            throw new Error(`BeatmapSet '${setId}' already contains file '${normalizedFilename}'`)
+          const fu = { File: getRealmFile(ctx, hash)!, Filename: normalizedFilename }
           ;(set.Files as any[]).push(fu)
+          set.Hash = computeBeatmapSetHash(ctx, set.Files)
+          validateOwnerHashes(ctx, set)
           markChanged(ctx)
         })
         transaction?.finalize()
-        return { filename, hash, content }
+        return { filename: normalizedFilename, hash, content }
       } catch (error) {
         try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
         throw error

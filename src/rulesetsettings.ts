@@ -13,9 +13,10 @@ export function createRulesetSettingModule(ctx: OsuFilesContext) {
   const query = new RulesetSettingQuery(ctx.realm)
   query.enableCache = ctx.queryCache ?? true
   const get = query.proxify()
+  const liveGet = get.live()
 
   const findSetting = (rulesetName: RulesetShortName, variant: number, key: string) =>
-    get.byRulesetNameEquals(rulesetName).byVariantExact(variant).byKeyEquals(key)[0]
+    liveGet.byRulesetNameEquals(rulesetName).byVariantExact(variant).byKeyEquals(key)[0]
 
   function getSettings(rulesetName: RulesetShortName, variant = 0): Record<string, string> {
     const map: Record<string, string> = {}

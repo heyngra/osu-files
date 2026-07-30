@@ -18,6 +18,7 @@ const rl = readline.createInterface({
   })
 
   try {
+    // Scores returned by queries are detached read snapshots, which is safe for export.
     const recent = initialized.scores.get.sortedBy('Date').slice(0, 10)
     if (recent.length === 0) {
       console.log('No scores found.')
