@@ -31,7 +31,7 @@ describe('EditSession', () => {
       }
     }
 
-    const thing = realm.objectForPrimaryKey<any>('EditThing', 1)!
+    const thing = realm.objectForPrimaryKey<Record<string, unknown>>('EditThing', 1)!
     assert.strictEqual(thing.Name, 'new')
     assert.strictEqual(thing.User.Username, 'new-user')
     realm.close()
@@ -44,7 +44,7 @@ describe('EditSession', () => {
     session.at(0)!.Name = 'discarded'
     session.rollback()
 
-    assert.strictEqual(realm.objectForPrimaryKey<any>('EditThing', 1)!.Name, 'old')
+    assert.strictEqual(realm.objectForPrimaryKey<Record<string, unknown>>('EditThing', 1)!.Name, 'old')
     realm.close()
   })
 })

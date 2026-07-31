@@ -6,6 +6,20 @@ import { parseOsr as parseReplay } from './osr/parse.js'
 import { roundHalfEven } from './osr/legacy-conversion.js'
 import { CURRENT_SCHEMA_VERSION, MIN_SCHEMA_VERSION } from './schema/version.js'
 
+type MigrationFileUsage = { Filename?: string; File?: { Hash?: string } }
+type MigrationRecord = {
+  [key: string]: unknown
+  OnlineID?: number | null; Action?: number; KeyCombination?: string | null
+  RulesetName?: string | null; Variant?: number | null; Protected?: boolean
+  StarRating?: number; UserSettings?: object | null; BeatmapInfo?: MigrationRecord | null
+  Hash?: string | null; Files?: Iterable<MigrationFileUsage>; Ruleset?: MigrationRecord | null
+  RulesetID?: unknown; Author?: string | MigrationRecord | null; IsLegacyScore?: boolean
+  TotalScoreVersion?: number; TotalScore?: number; LegacyTotalScore?: number
+  Mods?: string | null; TotalScoreWithoutMods?: number; LegacyOnlineID?: number
+  Status?: number; LastOnlineUpdate?: Date | null; OnlineMD5Hash?: string
+  BeatmapHash?: string; ClientVersion?: string; Date?: Date
+}
+
 /** A single event emitted while migrating a Realm. */
 export type MigrationEvent = {
   version: number
@@ -43,13 +57,13 @@ for (let version = MIN_SCHEMA_VERSION + 1; version <= CURRENT_SCHEMA_VERSION; ve
 
 steps.set(7, step(7, 'Normalize online IDs', (_old, realm) => {
   for (const type of ['Beatmap', 'BeatmapSet', 'Ruleset'])
-    for (const object of realm.objects<any>(type))
+    for (const object of realm.objects<MigrationRecord>(type))
       if (object.OnlineID == null) object.OnlineID = -1
 }))
 
 steps.set(8, step(8, 'Remove obsolete scroll speed bindings', (_old, realm) => {
   for (const action of [14, 15]) {
-    const binding = [...realm.objects<any>('KeyBinding')].find(object => object.Action === action)
+    const binding = [...realm.objects<MigrationRecord>('KeyBinding')].find(object => object.Action === action)
     const key = action === 14 ? 'Control + Plus' : 'Control + Minus'
     if (binding && binding.KeyCombination === key) realm.delete(binding)
   }
@@ -83,12 +97,12 @@ steps.set(11, step(11, 'Convert keybinding links', (oldRealm, realm, context) =>
 }))
 
 steps.set(14, step(14, 'Create beatmap user settings', (_old, realm) => {
-  for (const beatmap of realm.objects<any>('Beatmap'))
+  for (const beatmap of realm.objects<MigrationRecord>('Beatmap'))
     if (!beatmap.UserSettings) beatmap.UserSettings = { Offset: 0 }
 }))
 
 steps.set(20, step(20, 'Reset star ratings', (_old, realm) => {
-  for (const beatmap of realm.objects<any>('Beatmap')) beatmap.StarRating = -1
+  for (const beatmap of realm.objects<MigrationRecord>('Beatmap')) beatmap.StarRating = -1
 }))
 
 steps.set(21, step(21, 'Import legacy collections', (_old, realm, context) => {
@@ -98,10 +112,11 @@ steps.set(21, step(21, 'Import legacy collections', (_old, realm, context) => {
   try {
     const entries = readLegacyCollectionDb(readFileSync(path))
     for (const entry of entries) {
-      const existing = realm.objects<any>('BeatmapCollection').filtered('Name == $0', entry.name)[0]
+      const existing = realm.objects<MigrationRecord>('BeatmapCollection').filtered('Name == $0', entry.name)[0]
       if (existing) {
+        const hashes = existing.BeatmapMD5Hashes as string[]
         for (const hash of entry.beatmapMD5s)
-          if (!existing.BeatmapMD5Hashes.includes(hash)) existing.BeatmapMD5Hashes.push(hash)
+          if (!hashes.includes(hash)) hashes.push(hash)
       } else {
         realm.create('BeatmapCollection', {
           ID: new Realm.BSON.UUID(),
@@ -121,16 +136,16 @@ steps.set(21, step(21, 'Import legacy collections', (_old, realm, context) => {
 }))
 
 steps.set(25, step(25, 'Remove protected skins', (_old, realm) => {
-  for (const skin of [...realm.objects<any>('Skin')].filter(s => s.Protected)) realm.delete(skin)
+  for (const skin of [...realm.objects<MigrationRecord>('Skin')].filter(s => s.Protected)) realm.delete(skin)
 }))
 
 steps.set(26, step(26, 'Backfill score beatmap hashes', (_old, realm) => {
-  for (const score of realm.objects<any>('Score'))
+  for (const score of realm.objects<MigrationRecord>('Score'))
     score.BeatmapHash = score.BeatmapInfo?.Hash ?? ''
 }))
 
 steps.set(28, step(28, 'Detect legacy scores', (_old, realm, context) => {
-  for (const score of realm.objects<any>('Score')) {
+  for (const score of realm.objects<MigrationRecord>('Score')) {
     const replay = readScoreReplay(context, score)
     if (!replay) continue
     try { score.IsLegacyScore = replay.gameVersion < 30000000 } catch (error) {
@@ -140,7 +155,7 @@ steps.set(28, step(28, 'Detect legacy scores', (_old, realm, context) => {
 }))
 
 steps.set(31, step(31, 'Initialize score versions', (_old, realm) => {
-  for (const score of realm.objects<any>('Score')) {
+  for (const score of realm.objects<MigrationRecord>('Score')) {
     if (score.IsLegacyScore && isLegacyRuleset(score.Ruleset)) {
       score.TotalScoreVersion = 30000002
       score.LegacyTotalScore = score.TotalScore
@@ -151,7 +166,7 @@ steps.set(31, step(31, 'Initialize score versions', (_old, realm) => {
 }))
 
 steps.set(32, step(32, 'Restore ScoreV2 legacy scores', (_old, realm, context) => {
-  for (const score of realm.objects<any>('Score')) {
+  for (const score of realm.objects<MigrationRecord>('Score')) {
     if (!score.IsLegacyScore || !isLegacyRuleset(score.Ruleset)) continue
     const replay = readScoreReplay(context, score)
     if (!replay?.mods.scoreV2) continue
@@ -164,23 +179,23 @@ steps.set(32, step(32, 'Restore ScoreV2 legacy scores', (_old, realm, context) =
 }))
 
 steps.set(33, step(33, 'Remove conflicting chat binding', (_old, realm) => {
-  for (const binding of [...realm.objects<any>('KeyBinding')])
+  for (const binding of [...realm.objects<MigrationRecord>('KeyBinding')])
     if (binding.Action === 47 && binding.KeyCombination === 'Tab') realm.delete(binding)
 }))
 
 steps.set(35, step(35, 'Remove duplicate keybindings', (_old, realm) => {
-  const keyBindings = [...realm.objects<any>('KeyBinding')]
+  const keyBindings = [...realm.objects<MigrationRecord>('KeyBinding')]
   const catchDash = keyBindings.filter(binding =>
     binding.RulesetName === 'fruits' && binding.Action === 2,
   )
   if (catchDash.length > 0 && catchDash.every(binding => binding.KeyCombination === 'Shift'))
-    catchDash.at(-1).KeyCombination = 'MouseLeft'
+    catchDash.at(-1)!.KeyCombination = 'MouseLeft'
 
   const global = keyBindings.filter(binding => binding.RulesetName == null)
   for (const actions of GLOBAL_ACTION_CATEGORIES)
-    clearDuplicateBindings(global.filter(binding => actions.has(binding.Action)))
+    clearDuplicateBindings(global.filter(binding => actions.has(binding.Action ?? -1)))
 
-  const groups = new Map<string, any[]>()
+  const groups = new Map<string, MigrationRecord[]>()
   for (const binding of keyBindings.filter(binding => binding.RulesetName != null)) {
     const key = `${binding.RulesetName}:${binding.Variant ?? ''}`
     const group = groups.get(key)
@@ -191,9 +206,10 @@ steps.set(35, step(35, 'Remove duplicate keybindings', (_old, realm) => {
 }))
 
 steps.set(36, step(36, 'Normalize score online IDs', (_old, realm) => {
-  for (const score of realm.objects<any>('Score')) {
-    if (score.OnlineID > 0) {
-      score.LegacyOnlineID = score.OnlineID
+  for (const score of realm.objects<MigrationRecord>('Score')) {
+    const onlineId = score.OnlineID ?? -1
+    if (onlineId > 0) {
+      score.LegacyOnlineID = onlineId
       score.OnlineID = -1
     } else {
       score.LegacyOnlineID = -1
@@ -203,7 +219,7 @@ steps.set(36, step(36, 'Normalize score online IDs', (_old, realm) => {
 }))
 
 steps.set(39, step(39, 'Reset unprocessed object counts', (_old, realm) => {
-  for (const beatmap of realm.objects<any>('Beatmap')) {
+  for (const beatmap of realm.objects<MigrationRecord>('Beatmap')) {
     if (beatmap.TotalObjectCount === 0 && beatmap.EndTimeObjectCount === 0) {
       beatmap.TotalObjectCount = -1
       beatmap.EndTimeObjectCount = -1
@@ -212,14 +228,14 @@ steps.set(39, step(39, 'Reset unprocessed object counts', (_old, realm) => {
 }))
 
 steps.set(41, step(41, 'Populate score values without mod multipliers', (_old, realm, context) => {
-  for (const score of realm.objects<any>('Score')) {
-    if (score.TotalScoreWithoutMods > 0) continue
+  for (const score of realm.objects<MigrationRecord>('Score')) {
+    if ((score.TotalScoreWithoutMods ?? 0) > 0) continue
     const multiplier = scoreMultiplier(score)
     if (!multiplier || !Number.isFinite(multiplier) || multiplier <= 0) {
       warn(context, 41, 'Populate score values without mod multipliers', `Could not calculate score ${String(score.ID)}`)
       continue
     }
-    score.TotalScoreWithoutMods = roundHalfEven(score.TotalScore / multiplier)
+    score.TotalScoreWithoutMods = roundHalfEven((score.TotalScore ?? 0) / multiplier)
   }
 }))
 
@@ -249,7 +265,7 @@ steps.set(47, step(47, 'Remove obsolete absolute scroll binding', (_old, realm) 
 }))
 
 steps.set(48, step(48, 'Reset qualified beatmaps', (_old, realm) => {
-  for (const beatmap of realm.objects<any>('Beatmap')) {
+  for (const beatmap of realm.objects<MigrationRecord>('Beatmap')) {
     if (beatmap.Status === 3) {
       beatmap.LastOnlineUpdate = null
       beatmap.OnlineMD5Hash = ''
@@ -259,7 +275,7 @@ steps.set(48, step(48, 'Reset qualified beatmaps', (_old, realm) => {
 }))
 
 steps.set(49, step(49, 'Normalize empty legacy score IDs', (_old, realm) => {
-  for (const score of realm.objects<any>('Score'))
+  for (const score of realm.objects<MigrationRecord>('Score'))
     if (score.LegacyOnlineID === 0) score.LegacyOnlineID = -1
 }))
 
@@ -301,9 +317,9 @@ function warn(context: MigrationContext, version: number, name: string, message:
   context.onEvent?.(event)
 }
 
-function migrateIndexed(oldRealm: Realm, newRealm: Realm, type: string, migrate: (oldObject: any, newObject: any) => void | false, context: MigrationContext): void {
-  const oldObjects = [...oldRealm.objects<any>(type)]
-  const newObjects = [...newRealm.objects<any>(type)]
+function migrateIndexed(oldRealm: Realm, newRealm: Realm, type: string, migrate: (oldObject: MigrationRecord, newObject: MigrationRecord) => void | false, context: MigrationContext): void {
+  const oldObjects = [...oldRealm.objects<MigrationRecord>(type)]
+  const newObjects = [...newRealm.objects<MigrationRecord>(type)]
   for (let i = 0; i < Math.min(oldObjects.length, newObjects.length); i++) {
     if (migrate(oldObjects[i], newObjects[i]) === false) newRealm.delete(newObjects[i])
   }
@@ -320,7 +336,7 @@ function rulesetName(id: unknown): string | undefined {
 }
 
 function removeBinding(realm: Realm, action: number, keyCombination: string): void {
-  const binding = [...realm.objects<any>('KeyBinding')].find(object => object.Action === action && object.KeyCombination === keyCombination)
+  const binding = [...realm.objects<MigrationRecord>('KeyBinding')].find(object => object.Action === action && object.KeyCombination === keyCombination)
   if (binding) realm.delete(binding)
 }
 
@@ -335,8 +351,8 @@ const GLOBAL_ACTION_CATEGORIES = [
   new Set([0, 21, 1, 5, 4, 25, 59]),
 ]
 
-function clearDuplicateBindings(bindings: any[]): void {
-  const byCombination = new Map<string, any[]>()
+function clearDuplicateBindings(bindings: MigrationRecord[]): void {
+  const byCombination = new Map<string, MigrationRecord[]>()
   for (const binding of bindings) {
     const group = byCombination.get(binding.KeyCombination ?? 'None')
     if (group) group.push(binding)
@@ -351,10 +367,10 @@ function clearDuplicateBindings(bindings: any[]): void {
 
 function remapManiaKeybindings(realm: Realm, columns: number, dual: boolean): void {
   const variant = dual ? 1000 + columns * 2 : columns
-  const bindings = [...realm.objects<any>('KeyBinding')]
+  const bindings = [...realm.objects<MigrationRecord>('KeyBinding')]
     .filter(binding => binding.RulesetName === 'mania' && binding.Variant === variant)
     .map(binding => ({ Action: binding.Action, KeyCombination: binding.KeyCombination }))
-  for (const binding of [...realm.objects<any>('KeyBinding')].filter(object => object.RulesetName === 'mania' && object.Variant === variant))
+  for (const binding of [...realm.objects<MigrationRecord>('KeyBinding')].filter(object => object.RulesetName === 'mania' && object.Variant === variant))
     realm.delete(binding)
 
   let oldNormalAction = 10
@@ -374,13 +390,13 @@ function remapManiaKeybindings(realm: Realm, columns: number, dual: boolean): vo
   }
 }
 
-function isLegacyRuleset(ruleset: any): boolean {
+function isLegacyRuleset(ruleset: MigrationRecord | null | undefined): boolean {
   return ruleset != null && Number(ruleset.OnlineID) >= 0 && Number(ruleset.OnlineID) <= 3
 }
 
-function readScoreReplay(context: MigrationContext, score: any): ReturnType<typeof parseReplay> | undefined {
+function readScoreReplay(context: MigrationContext, score: MigrationRecord): ReturnType<typeof parseReplay> | undefined {
   if (!context.filesFolderPath) return undefined
-  const usage = [...(score.Files ?? [])].find((file: any) => String(file.Filename ?? '').toLowerCase().endsWith('.osr'))
+  const usage = [...(score.Files ?? [])].find(file => String(file.Filename ?? '').toLowerCase().endsWith('.osr'))
   const hash = usage?.File?.Hash
   if (!hash) return undefined
   try {
@@ -390,7 +406,7 @@ function readScoreReplay(context: MigrationContext, score: any): ReturnType<type
   }
 }
 
-function scoreMultiplier(score: any): number | undefined {
+function scoreMultiplier(score: MigrationRecord): number | undefined {
   const ruleset = String(score.Ruleset?.ShortName ?? '')
   const mods = parseModDetails(score.Mods)
   if (!mods) return undefined
@@ -407,7 +423,7 @@ function scoreMultiplier(score: any): number | undefined {
   return result
 }
 
-function multiplierFor(ruleset: string, mod: string, settings: Record<string, unknown> | undefined, score: any): number | undefined {
+function multiplierFor(ruleset: string, mod: string, settings: Record<string, unknown> | undefined, score: MigrationRecord): number | undefined {
   const configured = hasSettings(settings)
   if (mod === 'NF' || mod === 'EZ') return 0.5
   if (mod === 'HT' || mod === 'DC') return rateAdjustMultiplier(numberSetting(settings, 'speed_change') ?? 0.75)
@@ -474,7 +490,7 @@ function rateAdjustMultiplier(speedChange: number): number {
   return speedChange >= 1 ? 1 + value / 5 : 0.6 + value
 }
 
-function maniaKeyMultiplier(score: any): number {
+function maniaKeyMultiplier(score: MigrationRecord): number {
   const clientVersion = String(score.ClientVersion ?? '')
   const pieces = clientVersion.split('.')
   if (pieces.length > 1) {

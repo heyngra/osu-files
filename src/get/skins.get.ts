@@ -2,6 +2,7 @@ import Realm from 'realm'
 import type { Skin } from '../schema/types.js'
 import { BUILT_IN_SKIN_IDS, BUILT_IN_SKIN_ORDER } from '../skin/constants.js'
 import { EntityQuery } from './base.js'
+import type { DeepReadonly } from '../types/readonly.js'
 
 export class SkinQuery extends EntityQuery<Skin> {
   constructor(realm: Realm) { super(realm, 'Skin') }
@@ -29,7 +30,7 @@ export class SkinQuery extends EntityQuery<Skin> {
   withFile(v: string)                    { return this._fkAny('Files.Filename', v) }
 
   /** @example db.skins.get.usable() */
-  usable(): Skin[] {
+  usable(): ReadonlyArray<DeepReadonly<Skin>> {
     const builtInMap = new Map<string, Skin>()
     for (const id of BUILT_IN_SKIN_IDS) {
       const s = this._realm.objectForPrimaryKey<Skin>('Skin', new Realm.BSON.UUID(id))
@@ -48,7 +49,7 @@ export class SkinQuery extends EntityQuery<Skin> {
   }
 
   /** @example db.skins.get.builtIn() */
-  builtIn(): Skin[] {
+  builtIn(): ReadonlyArray<DeepReadonly<Skin>> {
     const result: Skin[] = []
     for (const id of BUILT_IN_SKIN_ORDER) {
       const s = this._realm.objectForPrimaryKey<Skin>('Skin', new Realm.BSON.UUID(id))
@@ -58,7 +59,7 @@ export class SkinQuery extends EntityQuery<Skin> {
   }
 
   /** @example db.skins.get.user() */
-  user(): Skin[] {
+  user(): ReadonlyArray<DeepReadonly<Skin>> {
     return [...this._realm.objects<Skin>('Skin')
       .filtered('DeletePending == false AND Protected == false')
       .sorted('Name', false)]

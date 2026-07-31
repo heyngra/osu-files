@@ -133,7 +133,7 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
       assert.ok(data!.storyboard)
 
       const fg = data!.storyboard!.layers.get('Foreground')!
-      const sprite = fg.elements[0] as any
+      const sprite = fg.elements[0] as unknown as { file: { hash?: string } }
       sprite.addAlpha(0, 0, 500)
 
       const changed = osu.beatmap.save(String(collabId), data!)
@@ -244,7 +244,7 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
         readOnly: false,
         session: { assertOpen() {} },
         fileStore: { beginTransaction() { throw new Error('transaction setup failed') } },
-      } as any, archivePath), /transaction setup failed/)
+      } as unknown as never, archivePath), /transaction setup failed/)
       const leftovers = readdirSync(temporaryRoot)
         .filter(name => name.startsWith('archive-entry-'))
         .filter(name => readFileSync(join(temporaryRoot, name)).toString() === marker)

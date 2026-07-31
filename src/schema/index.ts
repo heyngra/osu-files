@@ -25,6 +25,7 @@ export type {
   KeyBinding,
   ModPreset,
   RealmNamedFileUsage,
+  RealmFile,
   RealmUser,
   Ruleset,
   RulesetSetting,

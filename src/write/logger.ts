@@ -73,10 +73,11 @@ function serialize(obj: unknown, seen?: Set<string>): unknown {
   if (typeof obj !== 'object') return obj
   if (obj instanceof Date) return obj.toISOString()
   if (Array.isArray(obj)) return obj.map(v => serialize(v, seen))
-  if (typeof (obj as any)[Symbol.iterator] === 'function')
+  if (typeof Reflect.get(obj, Symbol.iterator) === 'function')
     return [...(obj as Iterable<unknown>)].map(v => serialize(v, seen))
-  if (typeof (obj as any)?.toHexString === 'function')
-    return (obj as any).toHexString()
+  const toHexString = Reflect.get(obj, 'toHexString')
+  if (typeof toHexString === 'function')
+    return toHexString.call(obj)
 
   const id = identifier(obj)
   if (id && seen.has(id)) return id
@@ -262,21 +263,21 @@ export class RollbackLogger {
       switch (entry.action) {
         case LogAction.Create: {
           const pk = this.entryPrimaryKey(entry)
-          const obj = (this.realm as any).objectForPrimaryKey(entry.entity, pk)
+          const obj = this.realm.objectForPrimaryKey<Record<string, unknown>>(entry.entity, pk as never)
           if (obj) this.realm.delete(obj)
           break
         }
         case LogAction.Update: {
           if (!entry.before) break
           const pk = this.entryPrimaryKey(entry)
-          const obj = (this.realm as any).objectForPrimaryKey(entry.entity, pk)
+          const obj = this.realm.objectForPrimaryKey<Record<string, unknown>>(entry.entity, pk as never)
           if (!obj) break
           for (const [key, value] of Object.entries(entry.before)) {
             if (key === cfg.pk) continue
             if (cfg.fks?.[key])
-              (obj as any)[key] = this.resolveFkRef(value, cfg.fks[key])
+              Reflect.set(obj, key, this.resolveFkRef(value, cfg.fks[key]))
             else
-              (obj as any)[key] = value
+              Reflect.set(obj, key, value)
           }
           break
         }
@@ -309,15 +310,15 @@ export class RollbackLogger {
   private resolveFkRef(value: unknown, fkType: string): unknown {
     if (value === null || value === undefined) return null
       if (typeof value === 'string')
-      return (this.realm as any).objectForPrimaryKey(fkType, value) ?? null
+      return this.realm.objectForPrimaryKey<Record<string, unknown>>(fkType, value as never) ?? null
     if (typeof value === 'object') {
       const fkCfg = this.resolveConfig(fkType)
       if (!fkCfg) return value
       const pkVal = (value as Record<string, unknown>)[fkCfg.pk]
       if (pkVal !== undefined && pkVal !== null) {
         if (typeof pkVal === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(pkVal))
-          return (this.realm as any).objectForPrimaryKey(fkType, new Realm.BSON.UUID(pkVal)) ?? null
-        return (this.realm as any).objectForPrimaryKey(fkType, pkVal) ?? null
+      return this.realm.objectForPrimaryKey<Record<string, unknown>>(fkType, new Realm.BSON.UUID(pkVal)) ?? null
+        return this.realm.objectForPrimaryKey<Record<string, unknown>>(fkType, pkVal as never) ?? null
       }
     }
     return value

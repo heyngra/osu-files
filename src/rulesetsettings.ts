@@ -28,7 +28,7 @@ export function createRulesetSettingModule(ctx: OsuFilesContext) {
   function setSetting(rulesetName: RulesetShortName, key: string, value: string, variant = 0): void {
     assertWritable(ctx)
     const settingKey = `${rulesetName}/${variant}/${key}`
-    const existing = findSetting(rulesetName, variant, key)
+    const existing = findSetting(rulesetName, variant, key) as unknown as RulesetSetting | undefined
     if (existing) {
       const before = serializeSetting(existing)
       writeRealm(ctx, () => { existing.Value = value })
@@ -57,7 +57,16 @@ export function createRulesetSettingModule(ctx: OsuFilesContext) {
     }
   }
 
-  return { get, getSettings, setSetting, removeSetting }
+  return {
+    /** Queries readonly ruleset settings. */
+    get,
+    /** Returns settings for one ruleset and variant. */
+    getSettings,
+    /** Sets one ruleset setting. */
+    setSetting,
+    /** Removes one ruleset setting. */
+    removeSetting,
+  }
 }
 
 export type RulesetSettingModule = ReturnType<typeof createRulesetSettingModule>

@@ -12,7 +12,12 @@ import { getConfig } from './write/factory.js'
 export function createRulesetModule(ctx: OsuFilesContext) {
   const q = new RulesetQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
-  return { get: q.proxify(), write: createCrud<Ruleset>(ctx, getConfig('Ruleset')!) }
+  return {
+    /** Queries readonly ruleset snapshots. */
+    get: q.proxify(),
+    /** Creates, updates, deletes, or upserts rulesets. */
+    write: createCrud<Ruleset>(ctx, getConfig('Ruleset')!),
+  }
 }
 
 /** Ruleset sub-module with query and write operations. */

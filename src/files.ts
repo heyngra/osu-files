@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
-import type { File } from './schema/types.js'
-import type { FileRef } from './types.js'
+import type { File, RealmFile } from './schema/types.js'
+import { FileRef } from './types.js'
 import type { OsuFilesContext } from './context.js'
 import { FileQuery } from './get/files.get.js'
 import { createCrud } from './write/util.js'
@@ -17,15 +17,15 @@ export type FileCleanupReport = {
 }
 
 /** Returns a live File object for internal compound transactions. */
-export function getRealmFile(ctx: OsuFilesContext, hash: string): any {
-  return ctx.realm.objectForPrimaryKey<any>('File', hash)
+export function getRealmFile(ctx: OsuFilesContext, hash: string): RealmFile | undefined {
+  return ctx.realm.objectForPrimaryKey<RealmFile>('File', hash) ?? undefined
 }
 
 /** Removes one replaced blob only when no owner still references it. */
 export function cleanupBlobIfUnreferenced(ctx: OsuFilesContext, hash: string): void {
   if (!ctx.fileStore) return
   for (const type of ['Skin', 'BeatmapSet', 'Score']) {
-    for (const owner of ctx.realm.objects<any>(type)) {
+    for (const owner of ctx.realm.objects<{ Files?: Iterable<{ File?: { Hash?: string } }> }>(type)) {
       if ([...(owner.Files ?? [])].some(usage => usage.File?.Hash === hash)) return
     }
   }
@@ -35,7 +35,7 @@ export function cleanupBlobIfUnreferenced(ctx: OsuFilesContext, hash: string): v
 }
 
 /**
- * Deletes file records and storage files no longer referenced by any set, skin, or score.
+ * Deletes file records and storage files no longer referenced by a set, skin, or score.
  * @returns Counts of candidates, removed files, missing files, and failures.
  * @throws If no writable database is available.
  * @example
@@ -49,7 +49,7 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
   const fileSchema = ctx.realm.schema.find(schema => schema.name === 'File')
   const hasBacklinks = !!fileSchema && 'Usages' in fileSchema.properties
   const orphaned = hasBacklinks
-    ? [...ctx.realm.objects<any>('File').filtered('Usages.@count == 0')]
+    ? [...ctx.realm.objects<RealmFile>('File').filtered('Usages.@count == 0')]
     : findOrphanedFilesByScan(ctx)
   report.candidates = orphaned.length
   if (orphaned.length === 0) return report
@@ -71,7 +71,7 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
   return report
 }
 
-function findOrphanedFilesByScan(ctx: OsuFilesContext): any[] {
+function findOrphanedFilesByScan(ctx: OsuFilesContext): File[] {
   const referenced = new Set<string>()
   for (const src of [ctx.sets.get, ctx.skins.get, ctx.scores.get]) {
     for (const s of src) {
@@ -79,7 +79,7 @@ function findOrphanedFilesByScan(ctx: OsuFilesContext): any[] {
       for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
     }
   }
-  return ctx.files.get.filter(f => f.Hash && !referenced.has(f.Hash))
+  return ctx.files.get.filter(f => f.Hash && !referenced.has(f.Hash)) as unknown as File[]
 }
 
 /**
@@ -126,14 +126,34 @@ export function createFileModule(ctx: OsuFilesContext) {
     },
 
     fileRefWithContent(hash: string, filename: string): FileRef {
-      const ref: FileRef = { filename, hash }
+      let content: Buffer | undefined
       if (ctx.filesFolderPath) {
-        try { ref.content = ctx.fileStore?.read(hash, false) ?? readFileSync(fileStoragePath(ctx.filesFolderPath, hash)) } catch {}
+        try { content = ctx.fileStore?.read(hash, false) ?? readFileSync(fileStoragePath(ctx.filesFolderPath, hash)) } catch {}
       }
-      return ref
+      return new FileRef(filename, { hash, content })
     },
   }
 }
 
 /** File sub-module with query, write, and orphan cleanup operations. */
-export type FileModule = ReturnType<typeof createFileModule> & { store?: FileStore }
+export type FileUpdatePatch = never
+export interface FileModule {
+  /** Queries readonly file snapshots. */
+  readonly get: ReturnType<FileQuery['proxify']>
+  /** Stores files in the content-addressed store. */
+  readonly store?: FileStore
+  /** Stores a file and returns its hash. */
+  put(content: Buffer, expectedHash?: string): { hash: string; created: boolean }
+  /** Reads a stored file. */
+  read(hash: string, verify?: boolean): Buffer
+  /** Checks a stored file. */
+  verify(hash: string): boolean
+  /** File records cannot be updated. */
+  readonly write: ReturnType<typeof createCrud<File>>
+  /** Deletes unreferenced files. */
+  cleanupOrphanedFiles(): FileCleanupReport
+  /** Creates a file reference. */
+  fileRef(hash: string, filename: string): FileRef
+  /** Creates a file reference with local content when available. */
+  fileRefWithContent(hash: string, filename: string): FileRef
+}

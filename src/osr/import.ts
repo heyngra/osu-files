@@ -211,7 +211,7 @@ function prepareScore(
   }
 
   const hash = sha256(buffer)
-  const beatmap = parsed.beatmapMD5 ? ctx.beatmaps.get.live().byMd5Equals(parsed.beatmapMD5)[0] : undefined
+  const beatmap = parsed.beatmapMD5 ? ctx.beatmaps.get.live().byMd5Equals(parsed.beatmapMD5)[0] as unknown as Beatmap | undefined : undefined
   if (!beatmap) {
     if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
     if (!suppressWarning) console.warn(`[osu-files] Beatmap '${parsed.beatmapMD5}' not found in realm, importing score without beatmap reference`)
@@ -308,7 +308,7 @@ function importOsrBuffer(ctx: OsuFilesContext, buffer: Buffer, options?: OsrImpo
 
   const onlineId = parsed.parsedExtra?.online_id ?? 0
   if (onlineId > 0) {
-    const existing = ctx.scores.get.byOnlineIdExact(onlineId)[0]
+    const existing = ctx.scores.get.byOnlineIdExact(onlineId)[0] as unknown as Score | undefined
     if (existing !== undefined) return parsed
   }
   if (parsed.onlineScoreID > 0) {

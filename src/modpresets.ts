@@ -12,7 +12,12 @@ import { getConfig } from './write/factory.js'
 export function createModPresetModule(ctx: OsuFilesContext) {
   const q = new ModPresetQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
-  return { get: q.proxify(), write: createCrud<ModPreset>(ctx, getConfig('ModPreset')!) }
+  return {
+    /** Queries readonly mod-preset snapshots. */
+    get: q.proxify(),
+    /** Creates, updates, deletes, or upserts mod presets. */
+    write: createCrud<ModPreset>(ctx, getConfig('ModPreset')!),
+  }
 }
 
 /** Mod preset sub-module with query and write operations. */

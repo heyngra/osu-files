@@ -1,5 +1,5 @@
 import { Anchor, Easing } from './types.js'
-import type { FileRef } from '../../types.js'
+import { FileRef } from '../../types.js'
 import {
   StoryboardCommandGroup,
   StoryboardLoopingGroup,
@@ -174,7 +174,7 @@ function parseElement(line: string, sb: Storyboard, formatVersion: number): Stor
     const layer = parseLayer(fields[1])
     const origin = parseOrigin(fields[2])
     const path = unquote(fields[3])
-    const fileRef: FileRef = { filename: path }
+    const fileRef = new FileRef(path)
     const sp = new StoryboardSprite(fileRef, origin, { x: toFloat(fields[4]), y: toFloat(fields[5]) })
     sp._sb = sb
     sb.getLayer(layer).add(sp)
@@ -185,7 +185,7 @@ function parseElement(line: string, sb: Storyboard, formatVersion: number): Stor
     const layer = parseLayer(fields[1])
     const origin = parseOrigin(fields[2])
     const path = unquote(fields[3])
-    const fileRef: FileRef = { filename: path }
+    const fileRef = new FileRef(path)
     const loopType = toInt(fields[8]) === 1 ? 1 : 0
     let frameDelay = toFloat(fields[7])
     if (formatVersion < 6) frameDelay = Math.round(0.015 * frameDelay) * 1.186 * (1000 / 60)
@@ -199,7 +199,7 @@ function parseElement(line: string, sb: Storyboard, formatVersion: number): Stor
     const startTime = toFloat(fields[1])
     const layer = parseLayer(fields[2])
     const path = unquote(fields[3])
-    const fileRef: FileRef = { filename: path }
+    const fileRef = new FileRef(path)
     const vol = toInt(fields[4]) || 100
     sb.getLayer(layer).add(new StoryboardSample(fileRef, startTime, vol))
     return null

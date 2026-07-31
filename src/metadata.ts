@@ -9,7 +9,10 @@ import { MetadataQuery } from './get/metadata.get.js'
 export function createBeatmapMetadataModule(ctx: OsuFilesContext) {
   const q = new MetadataQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
-  return { get: q.proxify() }
+  return {
+    /** Queries readonly beatmap metadata snapshots. */
+    get: q.proxify(),
+  }
 }
 
 /** Beatmap metadata sub-module with query operations only. */

@@ -2,11 +2,11 @@ import Realm from 'realm'
 import type { OsuFilesContext } from '../context.js'
 import type { OsuBeatmap } from '../beatmap/types.js'
 import type { BeatmapSetData } from '../osz/types.js'
-import type { BeatmapSet, Beatmap } from '../schema/types.js'
+import type { BeatmapSet, Beatmap, Ruleset, RealmFile, Score, BeatmapCollection, BeatmapMetadata } from '../schema/types.js'
 import { assertWritable, markChanged, writeRealm } from '../context.js'
 import { MODE_TO_SHORTNAME, RULESETS } from '../ruleset-info.js'
 
-function resolveRulesetByMode(rulesets: Map<string, any>, mode: number) {
+function resolveRulesetByMode(rulesets: Map<string, Ruleset>, mode: number): Ruleset | undefined {
   const shortName = MODE_TO_SHORTNAME[mode]
   return shortName ? rulesets.get(shortName) : undefined
 }
@@ -49,16 +49,16 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
-  if (onlineID > 0) existingSet = ctx.sets.get.live().byOnlineIdExact(onlineID)[0] ?? null
-  if (!existingSet && setHash) existingSet = ctx.sets.get.live().byHashEquals(setHash)[0] ?? null
+  if (onlineID > 0) existingSet = ctx.sets.get.live().byOnlineIdExact(onlineID)[0] as unknown as BeatmapSet | null
+  if (!existingSet && setHash) existingSet = ctx.sets.get.live().byHashEquals(setHash)[0] as unknown as BeatmapSet | null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
   const previousBeatmaps = existingSet
     ? [...existingSet.Beatmaps].map(b => ({ difficulty: b.DifficultyName ?? '', md5: b.MD5Hash ?? '' }))
     : []
 
-  const rulesets = new Map<string, any>()
-  for (const ruleset of ctx.realm.objects<any>('Ruleset'))
+  const rulesets = new Map<string, Ruleset>()
+  for (const ruleset of ctx.realm.objects<Ruleset>('Ruleset'))
     if (ruleset.ShortName) rulesets.set(ruleset.ShortName, ruleset)
   for (const rs of STANDARD_RULESETS) {
     if (!rulesets.has(rs.ShortName))
@@ -68,16 +68,16 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   if (existingSet) {
     for (const b of [...existingSet.Beatmaps]) {
       writeRealm(ctx, () => {
-        for (const score of ctx.realm.objects<any>('Score').filtered('BeatmapInfo.ID == $0', b.ID))
-          score.BeatmapInfo = null
+        for (const score of ctx.realm.objects<Score>('Score').filtered('BeatmapInfo.ID == $0', b.ID))
+          score.BeatmapInfo = undefined
       })
       if (b.Metadata) writeRealm(ctx, () => ctx.realm.delete(b.Metadata!))
       ctx.beatmaps.write.delete(b.ID)
     }
   }
 
-  const filesByHash = new Map<string, any>()
-  for (const file of ctx.realm.objects<any>('File'))
+  const filesByHash = new Map<string, RealmFile>()
+  for (const file of ctx.realm.objects<RealmFile>('File'))
     if (file.Hash) filesByHash.set(file.Hash, file)
   for (const f of files) {
     if (!filesByHash.has(f.hash))
@@ -118,9 +118,9 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
     const ruleset = resolveRulesetByMode(rulesets, bm.general.mode)
     if (!ruleset) continue
 
-    let metadataObj: any
+    let metadataObj!: BeatmapMetadata
     writeRealm(ctx, () => {
-      metadataObj = ctx.realm.create('BeatmapMetadata', {
+      metadataObj = ctx.realm.create<BeatmapMetadata>('BeatmapMetadata', {
         Title: meta.title || '',
         TitleUnicode: meta.titleUnicode || '',
         Artist: meta.artist || '',
@@ -190,11 +190,12 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
         .filter((entry): entry is readonly [string, string] => !!entry[0] && !!entry[1]),
     )
     if (replacements.size > 0) {
-      for (const collection of ctx.realm.objects<any>('BeatmapCollection')) {
+      for (const collection of ctx.realm.objects<BeatmapCollection>('BeatmapCollection')) {
         const hashes = [...collection.BeatmapMD5Hashes]
         let changed = false
         for (let i = 0; i < hashes.length; i++) {
-          const replacement = hashes[i] ? replacements.get(hashes[i]) : undefined
+          const hash = hashes[i]
+          const replacement = hash ? replacements.get(hash) : undefined
           if (replacement) {
             hashes[i] = replacement
             changed = true
@@ -205,7 +206,7 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
     }
 
     for (const bm of createdBeatmaps) {
-      for (const score of ctx.realm.objects<any>('Score').filtered('BeatmapHash == $0', bm.Hash))
+      for (const score of ctx.realm.objects<Score>('Score').filtered('BeatmapHash == $0', bm.Hash))
         score.BeatmapInfo = bm
     }
   })

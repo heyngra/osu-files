@@ -3,16 +3,16 @@ import { sha256 } from './util.js'
 type RealmFileLike = { Hash?: string }
 type NamedFileUsageLike = { File?: RealmFileLike; Filename?: string }
 
-/** A filename paired with a verified content hash or its content. */
+/** A filename paired with a file hash or content. */
 export class FileRef {
-  filename: string
-  hash?: string
-  content?: Buffer
+  readonly filename: string
+  readonly hash?: string
+  readonly content?: Buffer
 
   constructor(
     first: string | RealmFileLike | NamedFileUsageLike,
     second?: string | { hash?: string; content?: Buffer },
-    ctx?: { files: { get: { byHashEquals: (h: string) => RealmFileLike[] } } },
+    ctx?: { files: { get: { byHashEquals: (h: string) => ReadonlyArray<RealmFileLike> } } },
   ) {
     if (typeof first === 'object' && 'File' in first) {
       const usage = first as NamedFileUsageLike
@@ -31,6 +31,10 @@ export class FileRef {
     }
 
     const filename = first as string
+    if (second === undefined) {
+      this.filename = filename
+      return
+    }
     const source = second as { hash?: string; content?: Buffer }
     let hash = source.hash
     const content = source.content
@@ -40,7 +44,8 @@ export class FileRef {
     }
 
     if (!hash) {
-      throw new Error(`FileRef '${filename}' must specify hash or content`)
+      this.filename = filename
+      return
     }
 
     if (!/^[a-f0-9]{64}$/.test(hash))

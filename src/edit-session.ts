@@ -1,6 +1,7 @@
 import Realm from 'realm'
 import type { RealmEditHooks } from './get/base.js'
 import './disposable.js'
+import type { DeepReadonly } from './types/readonly.js'
 
 type PendingChanges = Map<object, Map<PropertyKey, unknown>>
 type Root = { primaryKey: unknown; before: Record<string, unknown> | null }
@@ -16,7 +17,7 @@ function canWrap(value: unknown): value is object {
 }
 
 /**
- * Buffers mutations to managed Realm objects until commit or dispose.
+ * Buffers edits until commit or dispose.
  *
  * @example
  * using session = db.beatmaps.get.byMetadataAuthorContains('Monstrata').autoEdit()
@@ -48,9 +49,9 @@ export class EditSession<T> implements Iterable<T> {
     private readonly options?: { entity?: string; primaryKey?: string; hooks?: RealmEditHooks },
   ) {
     this.rootList = objects.map(object => ({
-      primaryKey: options?.primaryKey ? (object as any)[options.primaryKey] : undefined,
+      primaryKey: options?.primaryKey ? Reflect.get(object as object, options.primaryKey) : undefined,
       before: options?.entity && options.primaryKey && options.hooks
-        ? options.hooks.snapshot(realm, options.entity, (object as any)[options.primaryKey])
+        ? options.hooks.snapshot(realm, options.entity, Reflect.get(object as object, options.primaryKey))
         : null,
     }))
     this.items = objects.map((object, index) => this.wrap(object, this.rootList[index])) as T[]
@@ -85,7 +86,7 @@ export class EditSession<T> implements Iterable<T> {
       get: (target, property, receiver) => {
         const pending = this.changes.get(target)?.get(property)
         if (pending !== undefined || this.changes.get(target)?.has(property)) return pending
-        return this.wrap((target as any)[property], root)
+        return this.wrap(Reflect.get(target, property), root)
       },
       set: (target, property, newValue) => {
         if (this.closed) throw new Error('[osu-files] Edit session is closed')

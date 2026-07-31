@@ -96,7 +96,7 @@ describe('Storyboard parse', async () => {
 
   it('OsuStoryboardEvent removed from events union', () => {
     const bm = parseOsu(bwwText)
-    const rawSbe = bm.events.filter(e => (e as any).type === 'storyboard')
+    const rawSbe = bm.events.filter(e => (e as { type?: string }).type === 'storyboard')
     assert.strictEqual(rawSbe.length, 0)
   })
 

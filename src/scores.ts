@@ -10,13 +10,14 @@ import { sha256 } from './util.js'
 import { assertWritable, writeRealm } from './context.js'
 import { validateOwnerHashes } from './integrity.js'
 import { cleanupBlobIfUnreferenced, getRealmFile } from './files.js'
+import type { ScoreSnapshot } from './types/readonly.js'
 
 export type ScoreEditor = {
   /** Score UUID. */
   readonly id: string
   /** Detached score snapshot. */
-  readonly value: Readonly<Score>
-  /** Replaces the replay after parsing and refreshing replay-derived fields. */
+  readonly value: ScoreSnapshot
+  /** Replaces the replay and refreshes replay fields. */
   editReplay(transform: (content: Buffer) => Buffer | Promise<Buffer>): Promise<boolean>
 }
 
@@ -90,4 +91,12 @@ export function createScoreModule(ctx: OsuFilesContext) {
 }
 
 /** Score sub-module with query and write operations. */
-export type ScoreModule = ReturnType<typeof createScoreModule>
+export type ScoreUpdatePatch = Partial<Omit<Score, 'ID' | 'Hash' | 'Files'>>
+export interface ScoreModule {
+  /** Queries readonly score snapshots. */
+  readonly get: ReturnType<ScoreQuery['proxify']>
+  /** Creates, updates, deletes, or upserts scores. */
+  readonly write: ReturnType<typeof createCrud<Score>>
+  /** Opens one replay editor. */
+  open(scoreId: string): ScoreEditor
+}

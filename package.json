@@ -19,6 +19,7 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
     "typecheck": "tsc --noEmit",
+    "typecheck:public": "tsc -p tsconfig.type-tests.json --noEmit",
     "test:ci": "npm run typecheck && npm test",
     "prepublishOnly": "npm run build",
     "test": "node tests/run-tests.js",

@@ -12,6 +12,7 @@ import { assertWritable, markChanged, writeRealm } from './context.js'
 import { cloneSkinIni, parseSkinIni, serializeSkinIni, type SkinIniDocument } from './skin/skin-ini.js'
 import { fileStoragePath } from './util.js'
 import { computeSkinHash, fullSkinContentHash, normalizeFilename, validateOwnerHashes } from './integrity.js'
+import type { SkinSnapshot } from './types/readonly.js'
 
 export type OwnedFileEditor = {
   /** Normalized owner-local filename. */
@@ -30,8 +31,8 @@ export type SkinEditor = {
   /** Skin UUID. */
   readonly id: string
   /** Detached skin snapshot. */
-  readonly value: Readonly<Skin>
-  /** Opens one file reference for copy-on-write editing. */
+  readonly value: SkinSnapshot
+  /** Opens one owner-scoped file editor. */
   getFile(filename: string): OwnedFileEditor
   /** Reads this skin's skin.ini, if present. */
   readIni(): SkinIniDocument | undefined
@@ -319,7 +320,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
     exportOsk: async (skinId: string): Promise<Buffer> => {
       const skin = get.byId(skinId)[0]
       if (!skin) throw new Error(`Skin '${skinId}' not found`)
-      return exportOskData(skin, ctx.filesFolderPath!)
+      return exportOskData(skin as unknown as Skin, ctx.filesFolderPath!)
     },
 
     delete: (skinId: string): void => {
@@ -367,4 +368,28 @@ export function createSkinModule(ctx: OsuFilesContext) {
 }
 
 /** Skin sub-module with query, write, import/export, and lifecycle operations. */
-export type SkinModule = ReturnType<typeof createSkinModule>
+export type SkinUpdatePatch = Partial<Omit<Skin, 'ID' | 'Hash' | 'Files'>>
+export interface SkinModule {
+  /** Queries readonly skin snapshots. */
+  readonly get: ReturnType<SkinQuery['proxify']>
+  /** Creates, updates, deletes, or upserts skins. */
+  readonly write: ReturnType<typeof createCrud<Skin>>
+  /** Opens one skin editor. */
+  open(skinId: string): SkinEditor
+  /** Reads a skin.ini file. */
+  readIni(skinId: string): SkinIniDocument | undefined
+  /** Replaces a skin.ini file. */
+  replaceIni(skinId: string, source: string | SkinIniDocument): boolean
+  /** Edits a skin.ini file. */
+  editIni(skinId: string, edit: (document: SkinIniDocument) => void): boolean
+  /** Imports an .osk archive. */
+  importOsk(filePath: string): Promise<ImportedSkinData>
+  /** Exports a skin as an .osk archive. */
+  exportOsk(skinId: string): Promise<Buffer>
+  /** Marks a skin for deletion. */
+  delete(skinId: string): void
+  /** Clears a skin's delete flag. */
+  undelete(skinId: string): void
+  /** Copies a skin with a new ID and name. */
+  duplicate(skinId: string): Skin
+}

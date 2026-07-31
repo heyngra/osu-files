@@ -84,6 +84,7 @@ export { InputKey } from './keybindings/keys.js'
 
 export type { BeatmapSetData, BeatmapSetFile } from './osz/types.js'
 export { FileRef } from './types.js'
+export type { DeepMutable, DeepReadonly, FileSnapshot, SkinSnapshot, BeatmapSnapshot, BeatmapSetSnapshot, ScoreSnapshot } from './types/readonly.js'
 export type { StoryboardLayerName, TriggerName, BlendingMode } from './beatmap/storyboard/types.js'
 export type {
   OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,

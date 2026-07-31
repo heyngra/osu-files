@@ -4,7 +4,7 @@ import type { OsuFilesContext } from '../context.js'
 import { markChanged, writeRealm } from '../context.js'
 import type { FileStoreTransaction } from '../file-store.js'
 import { FileRef } from '../types.js'
-import type { BeatmapSet, RealmNamedFileUsage } from '../schema/types.js'
+import type { Beatmap, BeatmapSet, BeatmapCollection, Score, RealmNamedFileUsage } from '../schema/types.js'
 import { parseOsu } from './parse.js'
 import { serializeOsu } from './serialize.js'
 import type { OsuBeatmap } from './types.js'
@@ -35,7 +35,7 @@ function resolveStoryboardFiles(storyboard: Storyboard, setFiles: RealmNamedFile
     for (const el of layer.elements) {
       if (el instanceof StoryboardSprite || el instanceof StoryboardSample) {
         const found = setFiles.find(fu => normalizeFilename(fu.Filename ?? '') === normalizeFilename(el.path))
-        if (found?.File?.Hash) el.file.hash = found.File.Hash
+        if (found?.File?.Hash) el.file = new FileRef(el.file.filename, { hash: found.File.Hash, content: el.file.content })
       }
     }
   }
@@ -67,7 +67,7 @@ function mergeOsbContent(target: Storyboard, source: Storyboard, sourceType: Sto
 export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string): OsuBeatmap | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0]
+  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0] as unknown as Beatmap | undefined
   if (!beatmap) return undefined
 
   const hash = beatmap.Hash ?? ''
@@ -88,7 +88,7 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
   parsed.metadata.creator = beatmap.Metadata?.Author?.Username ?? parsed.metadata.creator
 
   if (beatmap.BeatmapSet) {
-    const osb = findOsbFile(beatmap.BeatmapSet)
+    const osb = findOsbFile(beatmap.BeatmapSet as unknown as BeatmapSet)
     if (osb) {
       const osbPath = fileStoragePath(ctx.filesFolderPath, osb.hash)
       try {
@@ -114,7 +114,7 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
   }
 
   if (parsed.storyboard && beatmap.BeatmapSet) {
-    resolveStoryboardFiles(parsed.storyboard, beatmap.BeatmapSet.Files ?? [])
+    resolveStoryboardFiles(parsed.storyboard, beatmap.BeatmapSet.Files as unknown as RealmNamedFileUsage[])
   }
 
   return parsed
@@ -176,7 +176,6 @@ function autoRegisterFileRefs(ctx: OsuFilesContext, setFiles: RealmNamedFileUsag
       if (!getRealmFile(ctx, hash)) {
         ctx.files.write.upsert({ Hash: hash })
       }
-      ref.hash = hash
     }
 
     if (hash) {
@@ -227,7 +226,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
   assertWritable(ctx)
 
   const beatmapId = new Realm.BSON.UUID(beatmapIdStr)
-  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0]
+  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0] as unknown as Beatmap | undefined
   if (!beatmap) throw new Error(`Beatmap '${beatmapIdStr}' not found`)
 
   // Validate every file ref in the storyboard
@@ -260,7 +259,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
   }
 
   const oldMd5Hash = beatmap.MD5Hash ?? ''
-  ctx.beatmaps.write.update(beatmapId, { Hash: newHash, MD5Hash: newMd5Hash })
+  ctx.beatmaps.write.update(beatmapId, { Hash: newHash, MD5Hash: newMd5Hash } as never)
 
   writeRealm(ctx, () => {
     beatmap.DifficultyName = modified.metadata.version
@@ -283,7 +282,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
     beatmap.Status = -4
     beatmap.LastLocalUpdate = new Date()
 
-    for (const collection of ctx.realm.objects<any>('BeatmapCollection')) {
+    for (const collection of ctx.realm.objects<BeatmapCollection>('BeatmapCollection')) {
       const hashes = [...collection.BeatmapMD5Hashes]
       const index = hashes.indexOf(oldMd5Hash)
       if (index >= 0) {
@@ -292,8 +291,8 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
       }
     }
 
-    for (const score of ctx.realm.objects<any>('Score')) {
-      if (score.BeatmapInfo?.ID === beatmap.ID) score.BeatmapInfo = null
+    for (const score of ctx.realm.objects<Score>('Score')) {
+      if (score.BeatmapInfo?.ID === beatmap.ID) score.BeatmapInfo = undefined
       if (score.BeatmapHash === newHash) score.BeatmapInfo = beatmap
     }
   })
@@ -302,7 +301,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
   if (freshBeatmap?.BeatmapSet) {
     const setObj = freshBeatmap.BeatmapSet
     const setPk = setObj.ID instanceof Realm.BSON.UUID ? setObj.ID : new Realm.BSON.UUID(String(setObj.ID))
-    const setCopy = ctx.sets.get.live().byId(setPk)[0]
+  const setCopy = ctx.sets.get.live().byId(setPk)[0] as unknown as BeatmapSet | undefined
     if (setCopy) {
       const setFiles = setCopy.Files
 
@@ -311,7 +310,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
       const filename = `${modified.metadata.artist} - ${modified.metadata.title} (${modified.metadata.creator}) [${modified.metadata.version}].osu`
         .replace(/[<>:"/\\|?*]/g, '_')
       const usage = setFiles.find(fu => fu.File?.Hash === oldHash)
-        ?? setFiles.find((fu: any) => fu.Filename === filename)
+        ?? setFiles.find((fu: RealmNamedFileUsage) => fu.Filename === filename)
       if (usage) {
         writeRealm(ctx, () => { usage.File = getRealmFile(ctx, newHash) })
       }
@@ -373,7 +372,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
       if (allBeatmapFiles.length > 0) {
         allBeatmapFiles.sort((a, b) => a.filename.localeCompare(b.filename))
         const setHash = sha256(Buffer.concat(allBeatmapFiles.map(f => f.buffer)))
-        ctx.sets.write.update(setPk, { Hash: setHash })
+        ctx.sets.write.update(setPk, { Hash: setHash } as never)
       }
     }
   }

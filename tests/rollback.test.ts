@@ -63,7 +63,7 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51 })
     const id = new Realm.BSON.UUID()
     osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4 })
-    osu.beatmaps.write.update(id as any, { DifficultyName: 'New Name' })
+    osu.beatmaps.write.update(id as never, { DifficultyName: 'New Name' })
     const entries = osu.logger.entries
     assert.strictEqual(entries.length, 2)
     const e = entries[1]
@@ -158,7 +158,7 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51 })
     const id = new Realm.BSON.UUID()
     osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4 })
-    osu.beatmaps.write.delete(id as any)
+    osu.beatmaps.write.delete(id as never)
     const entries = osu.logger.entries
     assert.strictEqual(entries.length, 2)
     const e = entries[1]
@@ -173,8 +173,8 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51 })
     const id = new Realm.BSON.UUID()
     osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4 })
-    osu.beatmaps.write.update(id as any, { DifficultyName: 'X' })
-    osu.beatmaps.write.delete(id as any)
+    osu.beatmaps.write.update(id as never, { DifficultyName: 'X' })
+    osu.beatmaps.write.delete(id as never)
     const entries = osu.logger.entries
     assert.strictEqual(entries[0].action, 'create')
     assert.strictEqual(entries[1].action, 'update')
@@ -220,7 +220,7 @@ describe('Rollback — revert', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51 })
     const id = new Realm.BSON.UUID()
     osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4, DifficultyName: 'original' })
-    osu.beatmaps.write.update(id as any, { DifficultyName: 'changed' })
+    osu.beatmaps.write.update(id as never, { DifficultyName: 'changed' })
     assert.strictEqual(osu.beatmaps.get.byId(id)[0]?.DifficultyName, 'changed')
     osu.logger.rollbackLast()
     assert.strictEqual(osu.beatmaps.get.byId(id)[0]?.DifficultyName, 'original')
@@ -232,7 +232,7 @@ describe('Rollback — revert', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51 })
     const id = new Realm.BSON.UUID()
     osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4, DifficultyName: 'restored' })
-    osu.beatmaps.write.delete(id as any)
+    osu.beatmaps.write.delete(id as never)
     assert.strictEqual(osu.beatmaps.get.byId(id)[0], undefined)
     osu.logger.rollbackLast()
     assert.strictEqual(osu.beatmaps.get.byId(id)[0]?.DifficultyName, 'restored')
@@ -244,8 +244,8 @@ describe('Rollback — revert', { timeout: 60000 }, () => {
     const osu = init(realmPath, { schemaVersion: 51 })
     const id = new Realm.BSON.UUID()
     osu.beatmaps.write.create({ ID: id, Status: 1, OnlineID: -1, TotalObjectCount: 0, EndTimeObjectCount: 0, Length: 0, BPM: 0, StarRating: 0, Hidden: false, BeatDivisor: 4, DifficultyName: 'chain' })
-    osu.beatmaps.write.update(id as any, { DifficultyName: 'step2' })
-    osu.beatmaps.write.delete(id as any)
+    osu.beatmaps.write.update(id as never, { DifficultyName: 'step2' })
+    osu.beatmaps.write.delete(id as never)
     osu.logger.rollbackAll()
     assert.strictEqual(osu.beatmaps.get.byId(id)[0], undefined)
     assert.strictEqual(osu.logger.entries.length, 0)
@@ -333,7 +333,7 @@ describe('RollbackEntry type', { timeout: 60000 }, () => {
     const entry = new RollbackEntry({
       timestamp: 1000,
       entity: 'Test',
-      action: 'create' as any,
+      action: 'create' as unknown as never,
       primaryKey: 'pk-1',
       before: null,
       after: { name: 'test' },

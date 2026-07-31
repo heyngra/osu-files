@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import type { BeatmapSet } from './schema/types.js'
-import type { FileRef } from './types.js'
+import { FileRef } from './types.js'
 import type { OsuFilesContext } from './context.js'
 import { SetQuery } from './get/sets.get.js'
 import { createCrud } from './write/util.js'
@@ -13,6 +13,7 @@ import { assertWritable, markChanged, writeRealm } from './context.js'
 import type { OwnedFileEditor } from './skins.js'
 import { computeBeatmapSetHash, normalizeFilename, validateOwnerHashes } from './integrity.js'
 import { md5 } from './util.js'
+import type { BeatmapSetSnapshot } from './types/readonly.js'
 
 function getSet(ctx: OsuFilesContext, setId: string): BeatmapSet | undefined {
   return ctx.realm.objectForPrimaryKey<BeatmapSet>('BeatmapSet', new Realm.BSON.UUID(setId)) ?? undefined
@@ -22,8 +23,8 @@ export type BeatmapSetEditor = {
   /** Beatmap-set UUID. */
   readonly id: string
   /** Detached beatmap-set snapshot. */
-  readonly value: Readonly<BeatmapSet>
-  /** Opens one set file for copy-on-write editing. */
+  readonly value: BeatmapSetSnapshot
+  /** Opens one owner-scoped file editor. */
   getFile(filename: string): OwnedFileEditor
 }
 
@@ -83,7 +84,7 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
                 set.Files[set.Files.indexOf(usage)] = { File: file, Filename: usage.Filename }
                 set.Hash = computeBeatmapSetHash(ctx, next)
                 validateOwnerHashes(ctx, set)
-                ctx.sets.write.update(set.ID, { Hash: set.Hash })
+                ctx.sets.write.update(set.ID, { Hash: set.Hash } as never)
                 return true
               })
               transaction?.finalize()
@@ -136,13 +137,13 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
           if (set.Files.some(file => normalizeFilename(file.Filename ?? '').toLowerCase() === normalizedFilename.toLowerCase()))
             throw new Error(`BeatmapSet '${setId}' already contains file '${normalizedFilename}'`)
           const fu = { File: getRealmFile(ctx, hash)!, Filename: normalizedFilename }
-          ;(set.Files as any[]).push(fu)
+          set.Files.push(fu)
           set.Hash = computeBeatmapSetHash(ctx, set.Files)
           validateOwnerHashes(ctx, set)
           markChanged(ctx)
         })
         transaction?.finalize()
-        return { filename: normalizedFilename, hash, content }
+        return new FileRef(normalizedFilename, { hash, content })
       } catch (error) {
         try { ctx.logger.discardSince(checkpoint) } finally { transaction?.rollback() }
         throw error
@@ -154,10 +155,7 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
     getFileRefs(setId: string): FileRef[] {
       const set = get.byId(setId)[0]
       if (!set) return []
-      return (set.Files ?? []).map(fu => ({
-        filename: fu.Filename ?? '',
-        hash: fu.File?.Hash ?? undefined,
-      }))
+      return (set.Files ?? []).map(fu => new FileRef(fu.Filename ?? '', { hash: fu.File?.Hash ?? undefined }))
     },
 
     getFileRefsWithContent(setId: string): FileRef[] {
@@ -166,15 +164,33 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
       if (!set) return []
       return (set.Files ?? []).map(fu => {
         const hash = fu.File?.Hash ?? ''
-        const ref: FileRef = { filename: fu.Filename ?? '', hash: hash || undefined }
+        let content: Buffer | undefined
         if (hash) {
-          try { ref.content = readFileSync(fileStoragePath(ctx.filesFolderPath!, hash)) } catch {}
+          try { content = readFileSync(fileStoragePath(ctx.filesFolderPath!, hash)) } catch {}
         }
-        return ref
+        return new FileRef(fu.Filename ?? '', { hash: hash || undefined, content })
       })
     },
   }
 }
 
 /** Beatmap set sub-module with query, write, import, and delete operations. */
-export type BeatmapSetModule = ReturnType<typeof createBeatmapSetModule>
+export type BeatmapSetUpdatePatch = Partial<Omit<BeatmapSet, 'ID' | 'Hash' | 'Files'>>
+export interface BeatmapSetModule {
+  /** Queries readonly beatmap-set snapshots. */
+  readonly get: ReturnType<SetQuery['proxify']>
+  /** Creates, updates, deletes, or upserts beatmap sets. */
+  readonly write: ReturnType<typeof createCrud<BeatmapSet>>
+  /** Opens one beatmap-set editor. */
+  open(setId: string): BeatmapSetEditor
+  /** Imports beatmap-set data. */
+  importSet(data: ImportSetInput): BeatmapSetData
+  /** Marks a beatmap set for deletion. */
+  delete(setId: string): void
+  /** Adds a file and updates the set hash. */
+  addFile(setId: string, filename: string, content: Buffer): FileRef
+  /** Returns file references owned by the set. */
+  getFileRefs(setId: string): FileRef[]
+  /** Returns file references with file content when available. */
+  getFileRefsWithContent(setId: string): FileRef[]
+}

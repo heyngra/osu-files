@@ -3,6 +3,7 @@ import { RealmClosedError } from '../realm-session.js'
 import { EditSession } from '../edit-session.js'
 import { getConfig } from '../write/factory.js'
 import { ValidationError } from '../write/validate.js'
+import type { DeepMutable, DeepReadonly } from '../types/readonly.js'
 import '../disposable.js'
 
 export type RealmEditHooks = {
@@ -20,23 +21,32 @@ export type RealmWriteHooks = {
 
 /** Batch write operations returned by {@link EntityQuery.write}. */
 export type WriteOps<T> = {
-  /** Deletes every entity matched by the query in one transaction. */
+  /**
+   * Deletes every matched entity in one transaction.
+   * @throws If a matched entity has protected references.
+   * @example db.beatmaps.get.byHidden(true).write.delete()
+   */
   delete(): number
-  /** Applies the same patch to every entity matched by the query in one transaction. */
+  /**
+   * Updates every matched entity in one transaction.
+   * @throws If the patch fails validation.
+   * @example db.beatmaps.get.byHidden(false).write.update({ Hidden: true })
+   */
   update(patch: Record<string, unknown>): number
 }
 
 /** A materialised query result with the same snapshot semantics as the array-like API. */
-export type QuerySnapshot<T> = T[]
+export type QuerySnapshot<T> = ReadonlyArray<DeepReadonly<T>>
+export type QuerySurface<T, Q extends EntityQuery<T> = EntityQuery<T>> = Q & ReadonlyArray<DeepReadonly<T>>
 
-function detach(value: unknown, seen = new Map<object, unknown>(), depth = 0): any {
+function detach(value: unknown, seen = new Map<object, unknown>(), depth = 0): unknown {
   if (value === null || typeof value !== 'object') return value
   if (depth > 6) return undefined
   if (value instanceof Date) return new Date(value.getTime())
   if (Buffer.isBuffer(value)) return Buffer.from(value)
   if (value instanceof Realm.BSON.UUID) return new Realm.BSON.UUID(value.toString())
   if (seen.has(value)) return seen.get(value)
-  if (Array.isArray(value) || typeof (value as any).length === 'number') {
+  if (Array.isArray(value) || isRealmCollection(value)) {
     const result: unknown[] = []
     seen.set(value, result)
     for (const item of value as Iterable<unknown>) result.push(detach(item, seen, depth + 1))
@@ -46,9 +56,17 @@ function detach(value: unknown, seen = new Map<object, unknown>(), depth = 0): a
   seen.set(value, result)
   for (const key of Object.keys(value)) {
     if ((key === 'BeatmapSet' || key === 'BeatmapInfo') && depth > 0) continue
-    result[key] = detach((value as any)[key], seen, depth + 1)
+    result[key] = detach(readProperty(value, key), seen, depth + 1)
   }
   return result
+}
+
+function isRealmCollection(value: object): value is Iterable<unknown> & { length: number } {
+  return 'length' in value && Symbol.iterator in value
+}
+
+function readProperty(value: object, key: string): unknown {
+  return Reflect.get(value, key)
 }
 
 export abstract class EntityQuery<T> {
@@ -71,8 +89,8 @@ export abstract class EntityQuery<T> {
     protected _name: string,
   ) {}
 
-  [Symbol.iterator](): Iterator<T> {
-    return this._eval()[Symbol.iterator]()
+  [Symbol.iterator](): Iterator<DeepReadonly<T>> {
+    return this._eval()[Symbol.iterator]() as Iterator<DeepReadonly<T>>
   }
 
   /**
@@ -84,10 +102,10 @@ export abstract class EntityQuery<T> {
    *   beatmap.Metadata!.Author!.Username = 'Sotarks'
    * // Commits automatically when the scope ends.
    */
-  autoEdit(): this {
+  autoEdit(): EditSession<DeepMutable<T>> {
     const query = this._clone()
     query._editing = true
-    return query
+    return query.proxify() as unknown as EditSession<DeepMutable<T>>
   }
 
   /**
@@ -105,42 +123,47 @@ export abstract class EntityQuery<T> {
    * `limit()` does not affect this count.
    * @returns Number of Realm objects matching the current predicates.
    */
+  /** Counts matched entities. */
   count(): number {
     if (this._realm.isClosed) throw new RealmClosedError()
-    return this._resultsCore(false).length
+    return (this._resultsCore(false) as { length: number }).length
   }
 
   /** Returns the first matching object without materialising the full result set.
    * @returns The first object in the current sort order, or `undefined`.
    */
-  first(): T | undefined {
+  first(): DeepReadonly<T> | undefined {
     if (this._realm.isClosed) throw new RealmClosedError()
-    const results = this._resultsCore(true)
-    return results.length > 0 ? (this._detached ? detach(results[0]) : results[0]) : undefined
+    const results = this._resultsCore(true) as T[]
+    return results.length > 0 ? (this._detached ? detach(results[0]) as DeepReadonly<T> : results[0] as DeepReadonly<T>) : undefined
   }
 
   /** Materialises the query into a detached JavaScript array snapshot.
    * @returns A new array containing the current query results.
    */
+  /** Returns detached readonly snapshots. */
   toArray(): QuerySnapshot<T> {
-    return this._eval().slice()
+    return this._eval().slice() as QuerySnapshot<T>
   }
 
-  /** Commits all buffered edits and writes rollback entries. */
+  /** Commits buffered edits. */
   commit(): void {
     this._editSession?.commit()
   }
 
-  /** Discards all buffered edits without writing to Realm. */
+  /** Discards buffered edits. */
   rollback(): void {
     this._editSession?.rollback()
   }
 
-  /** Uses live Realm objects for an explicitly advanced query. */
-  live(): this & T[] {
+  /**
+   * Returns readonly Realm-backed values; this does not open a transaction or recalculate hashes.
+   * Prefer {@link autoEdit} or {@link RealmSession} for writes.
+   */
+  live(): QuerySurface<T, this> {
     const q = this._clone()
     q._detached = false
-    return q
+    return q as unknown as QuerySurface<T, this>
   }
 
   [Symbol.dispose](): void {
@@ -171,14 +194,15 @@ export abstract class EntityQuery<T> {
         if (items.length === 0) return 0
         for (const item of items) {
           for (const guard of cfg.guards ?? []) {
-            const refs = self._realm.objects(guard.type).filtered(guard.filter, (item as any)[cfg.pk])
+            const id = Reflect.get(item as object, cfg.pk)
+            const refs = self._realm.objects(guard.type).filtered(guard.filter, id)
             if (refs.length > 0)
-              throw new ValidationError(`Cannot delete ${cfg.name} '${(item as any)[cfg.pk]}': ${refs.length} ${guard.label}(s) reference it`)
+              throw new ValidationError(`Cannot delete ${cfg.name} '${String(id)}': ${refs.length} ${guard.label}(s) reference it`)
           }
         }
         const snapshots = items.map(item => ({
-          id: (item as any)[cfg.pk],
-          before: hooks.snapshot(cfg.name, (item as any)[cfg.pk]),
+          id: Reflect.get(item as object, cfg.pk),
+          before: hooks.snapshot(cfg.name, Reflect.get(item as object, cfg.pk)),
         }))
         const realm = self._realm as Realm & { isInTransaction?: boolean }
         const apply = () => { for (const item of items) realm.delete(item as never) }
@@ -196,15 +220,15 @@ export abstract class EntityQuery<T> {
         for (const f of cfg.strip ?? []) delete data[f]
         for (const item of items) hooks.validate?.(cfg.name, item, data)
         const snapshots = items.map(item => ({
-          id: (item as any)[cfg.pk],
-          before: hooks.snapshot(cfg.name, (item as any)[cfg.pk]),
+          id: Reflect.get(item as object, cfg.pk),
+          before: hooks.snapshot(cfg.name, Reflect.get(item as object, cfg.pk)),
         }))
         const realm = self._realm as Realm & { isInTransaction?: boolean }
         const apply = () => {
           for (const item of items) {
             for (const key of Object.keys(data)) {
               if (key === cfg.pk) continue
-              ;(item as any)[key] = data[key]
+              Reflect.set(item as object, key, data[key])
             }
           }
         }
@@ -222,19 +246,19 @@ export abstract class EntityQuery<T> {
    * delegate to the evaluated result array.
    * @example db.scores.get.sortedBy('Date').slice(0, 10)
    */
-  proxify(): this & T[] {
+  proxify(): QuerySurface<T, this> {
     const q = this
     return new Proxy(q, {
       get(_, p: string | symbol) {
         if (typeof p !== 'string' || p in q || p === 'then')
-          return (q as any)[p]
+          return Reflect.get(q, p)
         const arr = q._eval()
-        const val = (arr as any)[p]
+        const val = Reflect.get(arr, p)
         return typeof val === 'function'
-          ? (...args: unknown[]) => (val as Function).apply(arr, args)
+          ? (...args: unknown[]) => Reflect.apply(val as (...args: unknown[]) => unknown, arr, args)
           : val
       },
-    }) as this & T[]
+    }) as unknown as QuerySurface<T, this>
   }
 
   /** @example db.scores.get.sortedBy('Date') */
@@ -295,7 +319,7 @@ export abstract class EntityQuery<T> {
     return this._fkEq('ID', this._uuid(v))
   }
 
-  private _resultsCore(applyLimit: boolean): any {
+  private _resultsCore(applyLimit: boolean): unknown {
     if (this._realm.isClosed) throw new RealmClosedError()
     let results = this._realm.objects<T>(this._name)
     if (this._preds.length > 0) results = results.filtered(this._preds.join(' AND '), ...this._args)
@@ -306,7 +330,7 @@ export abstract class EntityQuery<T> {
   }
 
   private _evalCore(): T[] {
-    return [...this._resultsCore(true)]
+    return [...this._resultsCore(true) as Iterable<T>]
   }
 
   private _eval(): T[] {
@@ -323,7 +347,7 @@ export abstract class EntityQuery<T> {
       })
       return this._editSession.map(value => value)
     }
-    const output = this._detached ? arr.map(item => detach(item)) : arr
+    const output = this._detached ? arr.map(item => detach(item) as T) : arr
     if (this.enableCache && this._preds.length > 0) {
       this._cached = output
       this._cachedGeneration = generation
@@ -331,13 +355,14 @@ export abstract class EntityQuery<T> {
     return output
   }
 
-  private _clone(): this & T[] {
-    return Object.assign(new (this.constructor as any)(this._realm), this, {
+  private _clone(): this {
+    const clone = Object.assign(Object.create(Object.getPrototypeOf(this)), this, {
       _preds: [...this._preds],
       _args: [...this._args],
       _cached: null,
       _editSession: null,
-    }).proxify()
+    }) as unknown as EntityQuery<T>
+    return clone.proxify() as unknown as this
   }
 
   private _add(pred: string, ...vals: unknown[]): this {

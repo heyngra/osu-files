@@ -50,7 +50,7 @@ export async function exportOsz(
 
   const set = ctx.sets.get.byId(setID)[0]
   if (!set) throw new Error(`BeatmapSet '${setID}' not found`)
-  validateOwnerHashes(ctx, set)
+  validateOwnerHashes(ctx, set as never)
 
   const zip = new ZipFile()
 

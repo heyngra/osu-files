@@ -16,4 +16,10 @@ export function createBeatmapModule(ctx: OsuFilesContext) {
 }
 
 /** Beatmap sub-module with query and write operations. */
-export type BeatmapModule = ReturnType<typeof createBeatmapModule>
+export type BeatmapUpdatePatch = Partial<Omit<Beatmap, 'ID' | 'Hash' | 'MD5Hash'>>
+export interface BeatmapModule {
+  /** Queries readonly beatmap snapshots. */
+  readonly get: ReturnType<BeatmapQuery['proxify']>
+  /** Creates, updates, deletes, or upserts beatmaps. */
+  readonly write: ReturnType<typeof createCrud<Beatmap>>
+}

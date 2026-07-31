@@ -207,7 +207,7 @@ describe('Import .osr', { timeout: 60000 }, () => {
     const before = osu.scores.get.length
     osu.osr.import(SAMPLE_OSR)
     osu.osr.import(SAMPLE_OSR)
-    const scores = osu.scores.get.filter((s: any) => s.LegacyOnlineID === 1518856368)
+    const scores = osu.scores.get.filter((s: { LegacyOnlineID?: number }) => s.LegacyOnlineID === 1518856368)
     assert.strictEqual(scores.length, before + 0)
     osu.close()
   })
@@ -391,13 +391,13 @@ describe('toBuffer (export without file write)', { timeout: 60000 }, () => {
 
   it('requires filesFolderPath', () => {
     const osu = init(realmPath, { schemaVersion: 51 })
-    assert.throws(() => osu.osr.toBuffer({} as any), /filesFolderPath/)
+    assert.throws(() => osu.osr.toBuffer({} as unknown as never), /filesFolderPath/)
     osu.close()
   })
 
   it('throws when score has no Files', () => {
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
-    assert.throws(() => osu.osr.toBuffer({} as any), /Replay file not found/)
+    assert.throws(() => osu.osr.toBuffer({} as unknown as never), /Replay file not found/)
     osu.close()
   })
 })

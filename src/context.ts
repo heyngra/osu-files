@@ -65,7 +65,8 @@ export function assertWritable(ctx: OsuFilesContext): void {
 
 /** Runs a Realm write without nesting a transaction during compound operations. */
 export function writeRealm<T>(ctx: OsuFilesContext, action: () => T): T {
-  return (ctx.realm as any).isInTransaction ? action() : ctx.realm.write(action)
+  const realm = ctx.realm as Realm & { isInTransaction?: boolean }
+  return realm.isInTransaction ? action() : realm.write(action)
 }
 
 /** Marks Realm writes so cached query snapshots can be refreshed. */
@@ -79,9 +80,9 @@ export function registerContextGeneration(ctx: OsuFilesContext): void {
     snapshot,
     validate: (realm, entity, primaryKey) => {
       if (entity === 'Skin' || entity === 'BeatmapSet' || entity === 'Score') {
-        const owner = realm.objectForPrimaryKey<any>(entity, primaryKey as never)
+        const owner = realm.objectForPrimaryKey<Record<string, unknown>>(entity, primaryKey as never)
         if (owner) {
-          validateOwnerHashes(ctx, owner)
+          validateOwnerHashes(ctx, owner as never)
         }
       }
     },
@@ -95,7 +96,7 @@ export function registerContextGeneration(ctx: OsuFilesContext): void {
       if ((entity === 'Skin' || entity === 'BeatmapSet' || entity === 'Score') && patch.Files !== undefined)
         throw new Error(`${entity}.Files is protected; use its owner editor`)
       if ((entity === 'Skin' || entity === 'BeatmapSet') && patch.Hash !== undefined) {
-        const files = (item as any).Files
+        const files = Reflect.get(item as object, 'Files')
         const expected = entity === 'Skin' ? computeSkinHash(ctx, files) : computeBeatmapSetHash(ctx, files)
         if (patch.Hash !== expected) throw new Error(`${entity}.Hash is derived from its files and cannot be assigned directly`)
       }
@@ -104,8 +105,10 @@ export function registerContextGeneration(ctx: OsuFilesContext): void {
           throw new Error('Beatmap.Hash must refer to a verified .osu blob')
       }
       if (entity === 'Score' && patch.Hash !== undefined) {
-        const replay = [...((item as any).Files ?? [])].find((file: any) => /\.osr$/i.test(file.Filename ?? ''))
-        if (replay?.File?.Hash !== patch.Hash) throw new Error('Score.Hash must match its replay file')
+        const replay = [...((Reflect.get(item as object, 'Files') as Iterable<Record<string, unknown>> | undefined) ?? [])]
+          .find(file => /\.osr$/i.test(String(file.Filename ?? '')))
+        const replayFile = replay?.File as { Hash?: string } | undefined
+        if (replayFile?.Hash !== patch.Hash) throw new Error('Score.Hash must match its replay file')
       }
     },
     snapshot: (entity, pk) => snapshot(ctx.realm, entity, pk),

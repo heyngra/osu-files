@@ -72,7 +72,7 @@ export function createKeyBindingModule(ctx: OsuFilesContext) {
       return registerDefaultsImpl(existing, defaults, registerWrite, rulesetName, variant)
     },
 
-    /** Registers all built-in defaults. */
+    /** Registers built-in defaults for every ruleset. */
     registerAllBuiltInDefaults(): { inserted: number; removed: number } {
       let inserted = 0
       let removed = 0
@@ -97,7 +97,9 @@ export function createKeyBindingModule(ctx: OsuFilesContext) {
       return { inserted, removed }
     },
 
+    /** Returns keys assigned to an action. */
     getActionKeys,
+    /** Replaces keys assigned to an action. */
     setActionKeys,
   }
 }

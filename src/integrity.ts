@@ -1,5 +1,5 @@
 import type { OsuFilesContext } from './context.js'
-import type { BeatmapSet, RealmNamedFileUsage, Skin, Score } from './schema/types.js'
+import type { BeatmapSet, RealmNamedFileUsage, Skin, Score, RealmFile } from './schema/types.js'
 import { fileStoragePath, md5, sha256 } from './util.js'
 
 export type IntegrityIssue = {
@@ -77,7 +77,7 @@ export function validateOwnerFiles(ctx: OsuFilesContext, owner: IntegrityOwner):
     const key = filename.toLowerCase()
     if (seen.has(key)) throw new Error(`Duplicate file reference '${filename}'`)
     seen.add(key)
-    validateFileReference(ctx, usage, owner.constructor?.name, String((owner as any).ID ?? ''))
+    validateFileReference(ctx, usage, owner.constructor?.name, String(Reflect.get(owner as object, 'ID') ?? ''))
   }
 }
 
@@ -109,10 +109,10 @@ export function validateDatabaseIntegrity(ctx: OsuFilesContext): IntegrityReport
   const check = (ownerType: string, owner: IntegrityOwner): void => {
     report.checkedOwners++
     try { validateOwnerHashes(ctx, owner) } catch (error) {
-      report.errors.push({ ownerType, ownerId: String((owner as any).ID), code: 'invalid-owner', message: error instanceof Error ? error.message : String(error), severity: 'error' })
+    report.errors.push({ ownerType, ownerId: String(Reflect.get(owner as object, 'ID')), code: 'invalid-owner', message: error instanceof Error ? error.message : String(error), severity: 'error' })
     }
   }
-  for (const file of ctx.realm.objects<any>('File')) {
+  for (const file of ctx.realm.objects<RealmFile>('File')) {
     report.checkedFiles++
     if (!file.Hash || !hashPattern.test(file.Hash)) report.errors.push({ ownerType: 'File', ownerId: String(file.Hash), code: 'invalid-hash', message: 'File has an invalid SHA-256 hash', severity: 'error' })
     else { try { if (!ctx.fileStore?.verify(file.Hash)) throw new Error('blob missing or corrupt') } catch (error) { report.errors.push({ ownerType: 'File', ownerId: file.Hash, code: 'invalid-blob', message: `File blob is ${error instanceof Error ? error.message : String(error)}`, severity: 'error' }) } }
@@ -139,7 +139,7 @@ export function createIntegrityModule(ctx: OsuFilesContext): IntegrityModule {
     repair: () => {
       if (ctx.readOnly) throw new Error('[osu-files] Database is read-only')
       const before = validateDatabaseIntegrity(ctx)
-      const repairable = [...ctx.realm.objects<any>('Skin'), ...ctx.realm.objects<any>('BeatmapSet')]
+  const repairable = [...ctx.realm.objects<Skin>('Skin'), ...ctx.realm.objects<BeatmapSet>('BeatmapSet')]
       for (const owner of repairable) {
         try {
           validateOwnerFiles(ctx, owner)

@@ -35,11 +35,11 @@ export class RealmSession {
   }
 
   /**
-   * The raw Realm instance for advanced operations.
+   * Returns the raw Realm instance.
    *
-   * @remarks This is an intentionally unsafe escape hatch. Mutating Realm-owned
-   * objects here bypasses file-reference validation, dependent hash updates,
-   * transactions, and rollback logging. Prefer the high-level module editors.
+   * Mutations bypass file and hash checks. Use a write transaction.
+   * Prefer {@link SkinEditor}, {@link BeatmapSetEditor}, {@link ScoreEditor},
+   * and {@link OwnedFileEditor}.
    * @example
    * db.realm.raw.write(() => db.realm.raw.create('Ruleset', data))
    */
@@ -49,10 +49,9 @@ export class RealmSession {
   }
 
   /**
-   * Runs a guarded read operation over raw Realm objects.
+   * Runs a read callback over raw Realm objects.
    *
-   * @remarks The callback receives live Realm objects. Mutating them is an
-   * advanced operation and does not receive high-level integrity protection.
+   * The callback receives mutable Realm-owned objects. Changes are not synchronized.
    * @example
    * const count = db.realm.read(realm => realm.objects('Score').length)
    */
@@ -62,10 +61,11 @@ export class RealmSession {
   }
 
   /**
-   * Runs a guarded write operation over raw Realm objects.
+   * Runs a write callback over raw Realm objects.
    *
-   * @remarks This is an advanced unsafe API. It only checks session state and
-   * read-only mode; callers are responsible for keeping files and hashes valid.
+   * The callback receives mutable Realm-owned objects. Keep hashes and file
+   * references valid. Prefer {@link SkinEditor}, {@link BeatmapSetEditor},
+   * {@link ScoreEditor}, and {@link OwnedFileEditor}.
    * @example
    * db.realm.write(realm => realm.delete(score))
    */
