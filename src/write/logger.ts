@@ -107,6 +107,7 @@ function serialize(obj: unknown, seen?: Set<string>): unknown {
 export class RollbackLogger {
   private entryList: RollbackEntry[] = []
   private entrySize = 0
+  private lastTimestamp = 0
   private logDir: string
   private realm: Realm
   private resolveConfig: ConfigResolver
@@ -181,8 +182,10 @@ export class RollbackLogger {
   log(entity: string, action: LogAction, primaryKey: unknown, before: unknown, after: unknown): void {
     if (!this.enabled) return
 
+    const timestamp = Math.max(Date.now(), this.lastTimestamp + 1)
+    this.lastTimestamp = timestamp
     const entry = new RollbackEntry({
-      timestamp: Date.now(),
+      timestamp,
       entity,
       action,
       primaryKey,
