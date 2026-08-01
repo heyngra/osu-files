@@ -36,6 +36,32 @@ describe('RulesetSetting module', () => {
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
 
+  it('rollback restores the composite-key setting identity', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osu-files-test-'))
+    const osu = init(join(root, 'client.realm'), { schemaVersion: 51 })
+    try {
+      osu.rulesetSettings.setSetting('osu', 'BeatmapListing', '0', 2)
+      osu.rulesetSettings.setSetting('osu', 'BeatmapListing', '1', 2)
+      assert.strictEqual(osu.logger.rollbackLast(), true)
+      assert.deepStrictEqual(osu.rulesetSettings.getSettings('osu', 2), { BeatmapListing: '0' })
+    } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
+  })
+
+  it('rollback removes a newly created setting and restores a deleted setting', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osu-files-test-'))
+    const osu = init(join(root, 'client.realm'), { schemaVersion: 51 })
+    try {
+      osu.rulesetSettings.setSetting('taiko', 'ScrollSpeed', '10')
+      osu.logger.rollbackLast()
+      assert.deepStrictEqual(osu.rulesetSettings.getSettings('taiko'), {})
+
+      osu.rulesetSettings.setSetting('taiko', 'ScrollSpeed', '10')
+      osu.rulesetSettings.removeSetting('taiko', 'ScrollSpeed')
+      assert.strictEqual(osu.logger.rollbackLast(), true)
+      assert.deepStrictEqual(osu.rulesetSettings.getSettings('taiko'), { ScrollSpeed: '10' })
+    } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
+  })
+
   it('setSetting with variant isolates settings', () => {
     const root = mkdtempSync(join(tmpdir(), 'osu-files-test-'))
     const osu = init(join(root, 'client.realm'), { schemaVersion: 51 })

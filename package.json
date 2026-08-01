@@ -23,7 +23,17 @@
     "test:ci": "npm run typecheck && npm test",
     "prepublishOnly": "npm run build",
     "test": "node tests/run-tests.js",
-    "test:int": "node tests/run-tests.js"
+    "test:int": "node tests/run-tests.js",
+    "test:docs": "node tests/run-tests.js tests/docs",
+    "docs:fixture": "tsx tools/docs/generate-realm-fixture.ts",
+    "docs:api": "typedoc --options typedoc.config.mjs",
+    "docs:manifest": "tsx tools/docs/generate-api-manifest.ts",
+    "docs:excludes": "tsx tools/docs/apply-api-excludes.ts",
+    "docs:runner-types": "tsx tools/docs/generate-runner-types.ts",
+    "docs:check": "tsx tools/docs/check-docs.ts",
+    "docs:build": "npm run build && npm run docs:fixture && npm run docs:api && npm run docs:manifest && npm run docs:excludes && npm run docs:runner-types && npm run docs:check && vitepress build docs",
+    "docs:dev": "vitepress dev docs",
+    "docs:test": "playwright test"
   },
   "dependencies": {
     "lzma-web": "^3.0.1",
@@ -32,10 +42,20 @@
     "yazl": "^3.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^26.1.1",
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
+    "monaco-editor": "^0.53.0",
     "tsx": "^4.23.1",
-    "typescript": "^5.7.0"
+    "typedoc": "^0.28.7",
+    "typedoc-plugin-markdown": "^4.7.0",
+    "typescript": "^5.7.0",
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.13"
+  },
+  "overrides": {
+    "vite": "6.4.3",
+    "esbuild": "0.25.12"
   }
 }

@@ -1,7 +1,8 @@
 import type { Beatmap } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { BeatmapQuery } from './get/beatmaps.get.js'
-import { createCrud } from './write/util.js'
+import type { QuerySurface } from './get/base.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 
 /**
@@ -19,7 +20,7 @@ export function createBeatmapModule(ctx: OsuFilesContext) {
 export type BeatmapUpdatePatch = Partial<Omit<Beatmap, 'ID' | 'Hash' | 'MD5Hash'>>
 export interface BeatmapModule {
   /** Queries readonly beatmap snapshots. */
-  readonly get: ReturnType<BeatmapQuery['proxify']>
+  readonly get: QuerySurface<Beatmap, BeatmapQuery>
   /** Creates, updates, deletes, or upserts beatmaps. */
-  readonly write: ReturnType<typeof createCrud<Beatmap>>
+  readonly write: Crud<Beatmap>
 }

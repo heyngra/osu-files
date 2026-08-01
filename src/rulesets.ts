@@ -1,7 +1,8 @@
 import type { Ruleset } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { RulesetQuery } from './get/rulesets.get.js'
-import { createCrud } from './write/util.js'
+import type { QuerySurface } from './get/base.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 
 /**
@@ -9,7 +10,7 @@ import { getConfig } from './write/factory.js'
  * @example
  * const rs = db.rulesets.get.byShortNameEquals('osu')[0]
  */
-export function createRulesetModule(ctx: OsuFilesContext) {
+export function createRulesetModule(ctx: OsuFilesContext): RulesetModule {
   const q = new RulesetQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
   return {
@@ -21,4 +22,9 @@ export function createRulesetModule(ctx: OsuFilesContext) {
 }
 
 /** Ruleset sub-module with query and write operations. */
-export type RulesetModule = ReturnType<typeof createRulesetModule>
+export type RulesetModule = {
+  /** Queries readonly ruleset snapshots. */
+  readonly get: QuerySurface<Ruleset, RulesetQuery>
+  /** Creates, updates, deletes, or upserts rulesets. */
+  readonly write: Crud<Ruleset>
+}

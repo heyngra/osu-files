@@ -50,7 +50,7 @@ const STAT_KEY_MAP: Record<string, StatKey> = {
  * @example
  * exportOsr(ctx, scoreId, './replay.osr')
  */
-export function exportOsr(ctx: OsuFilesContext, scoreId: string, outputPath: string): void {
+export function exportOsr(ctx: OsuFilesContext, scoreId: string, outputPath: string): void { // TODO: add exporting via Score object
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required for export')
 
   const score = ctx.scores.get.byId(scoreId)[0]

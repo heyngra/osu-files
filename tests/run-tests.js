@@ -7,18 +7,21 @@ function testFiles(directory) {
 
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name)
-    if (entry.isDirectory()) files.push(...testFiles(path))
-    else if (entry.isFile() && entry.name.endsWith('.test.ts')) files.push(path)
+    if (entry.isDirectory()) {
+      if (entry.name === 'docs') continue
+      files.push(...testFiles(path))
+    } else if (entry.isFile() && entry.name.endsWith('.test.ts')) files.push(path)
   }
 
   return files.sort()
 }
 
 const root = process.cwd()
+const startDir = process.argv[2] ?? 'tests'
 const setup = './tests/setup.js'
 let exitCode = 0
 
-for (const file of testFiles(join(root, 'tests'))) {
+for (const file of testFiles(join(root, startDir))) {
   const relativeFile = relative(root, file)
   const result = spawnSync(process.execPath, [
     '--import', 'tsx',

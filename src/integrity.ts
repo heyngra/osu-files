@@ -36,6 +36,10 @@ function content(ctx: OsuFilesContext, hash: string): Buffer {
   return ctx.fileStore.read(hash)
 }
 
+function canVerifyContent(ctx: OsuFilesContext): boolean {
+  return !!ctx.fileStore || !!ctx.fileTransaction
+}
+
 export function hashNamedFiles(ctx: OsuFilesContext, usages: Iterable<RealmNamedFileUsage>, predicate?: (filename: string) => boolean): string {
   const files = [...usages]
     .map(usage => ({ filename: normalizeFilename(usage.Filename ?? ''), hash: usage.File?.Hash ?? '' }))
@@ -66,6 +70,7 @@ export function validateFileReference(ctx: OsuFilesContext, usage: RealmNamedFil
   const filename = normalizeFilename(usage.Filename ?? '')
   const hash = usage.File?.Hash
   if (!hash || !hashPattern.test(hash)) throw new Error(`Invalid file reference '${filename}'${ownerType ? ` on ${ownerType} '${ownerId}'` : ''}`)
+  if (!canVerifyContent(ctx)) return
   const bytes = content(ctx, hash)
   if (sha256(bytes) !== hash) throw new Error(`File '${filename}' does not match its SHA-256 hash '${hash}'`)
 }
@@ -84,11 +89,13 @@ export function validateOwnerFiles(ctx: OsuFilesContext, owner: IntegrityOwner):
 export function validateOwnerHashes(ctx: OsuFilesContext, owner: IntegrityOwner): void {
   validateOwnerFiles(ctx, owner)
   if ('Creator' in owner) {
+    if (!canVerifyContent(ctx)) return
     const expected = computeSkinHash(ctx, owner.Files)
     if ((owner.Hash ?? '') !== expected) throw new Error(`Skin '${owner.Name ?? owner.ID}' has an invalid hash`)
     return
   }
   if ('Beatmaps' in owner) {
+    if (!canVerifyContent(ctx)) return
     const expected = computeBeatmapSetHash(ctx, owner.Files)
     if ((owner.Hash ?? '') !== expected) throw new Error(`BeatmapSet '${owner.ID}' has an invalid hash`)
     for (const beatmap of owner.Beatmaps ?? []) {
@@ -106,6 +113,13 @@ export function validateOwnerHashes(ctx: OsuFilesContext, owner: IntegrityOwner)
 
 export function validateDatabaseIntegrity(ctx: OsuFilesContext): IntegrityReport {
   const report: IntegrityReport = { valid: true, checkedOwners: 0, checkedFiles: 0, errors: [], warnings: [] }
+  if (!canVerifyContent(ctx)) {
+    report.warnings.push({
+      code: 'storage-unavailable',
+      message: 'File blobs and derived owner hashes were not checked because filesFolderPath is not configured',
+      severity: 'warning',
+    })
+  }
   const check = (ownerType: string, owner: IntegrityOwner): void => {
     report.checkedOwners++
     try { validateOwnerHashes(ctx, owner) } catch (error) {
@@ -115,7 +129,9 @@ export function validateDatabaseIntegrity(ctx: OsuFilesContext): IntegrityReport
   for (const file of ctx.realm.objects<RealmFile>('File')) {
     report.checkedFiles++
     if (!file.Hash || !hashPattern.test(file.Hash)) report.errors.push({ ownerType: 'File', ownerId: String(file.Hash), code: 'invalid-hash', message: 'File has an invalid SHA-256 hash', severity: 'error' })
-    else { try { if (!ctx.fileStore?.verify(file.Hash)) throw new Error('blob missing or corrupt') } catch (error) { report.errors.push({ ownerType: 'File', ownerId: file.Hash, code: 'invalid-blob', message: `File blob is ${error instanceof Error ? error.message : String(error)}`, severity: 'error' }) } }
+    else if (canVerifyContent(ctx)) {
+      try { if (!ctx.fileStore?.verify(file.Hash)) throw new Error('blob missing or corrupt') } catch (error) { report.errors.push({ ownerType: 'File', ownerId: file.Hash, code: 'invalid-blob', message: `File blob is ${error instanceof Error ? error.message : String(error)}`, severity: 'error' }) }
+    }
   }
   for (const owner of ctx.realm.objects<Skin>('Skin')) check('Skin', owner)
   for (const owner of ctx.realm.objects<BeatmapSet>('BeatmapSet')) check('BeatmapSet', owner)

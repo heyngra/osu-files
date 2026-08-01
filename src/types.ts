@@ -1,4 +1,4 @@
-import { sha256 } from './util.js'
+import { sha256 } from './hash.js'
 
 type RealmFileLike = { Hash?: string }
 type NamedFileUsageLike = { File?: RealmFileLike; Filename?: string }

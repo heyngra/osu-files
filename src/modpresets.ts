@@ -1,7 +1,8 @@
 import type { ModPreset } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { ModPresetQuery } from './get/modpresets.get.js'
-import { createCrud } from './write/util.js'
+import type { QuerySurface } from './get/base.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 
 /**
@@ -9,7 +10,7 @@ import { getConfig } from './write/factory.js'
  * @example
  * const mp = db.modpresets.get.byNameContains('HD')[0]
  */
-export function createModPresetModule(ctx: OsuFilesContext) {
+export function createModPresetModule(ctx: OsuFilesContext): ModPresetModule {
   const q = new ModPresetQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
   return {
@@ -21,4 +22,9 @@ export function createModPresetModule(ctx: OsuFilesContext) {
 }
 
 /** Mod preset sub-module with query and write operations. */
-export type ModPresetModule = ReturnType<typeof createModPresetModule>
+export type ModPresetModule = {
+  /** Queries readonly mod-preset snapshots. */
+  readonly get: QuerySurface<ModPreset, ModPresetQuery>
+  /** Creates, updates, deletes, or upserts mod presets. */
+  readonly write: Crud<ModPreset>
+}

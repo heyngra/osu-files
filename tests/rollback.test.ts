@@ -1,6 +1,6 @@
 import { describe, it, before, after } from 'node:test'
 import assert from 'node:assert'
-import { mkdirSync, rmSync } from 'fs'
+import { mkdirSync, rmSync, writeFileSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { init, RollbackEntry } from '../src/index.js'
@@ -71,6 +71,24 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     assert.ok(e.before)
     assert.ok(e.after)
     osu.close()
+  })
+
+  it('does not treat a primary key as a rollback log path', () => {
+    const target = join(tmpdir(), 'osu-audit-ruleset-target.json')
+    writeFileSync(target, 'sentinel')
+    const osu = init(realmPath, { schemaVersion: 51 })
+    try {
+      osu.rulesets.write.create({
+        ShortName: '/../../osu-audit-ruleset-target',
+        OnlineID: 999,
+        Available: true,
+        LastAppliedDifficultyVersion: 0,
+      })
+      assert.strictEqual(readFileSync(target, 'utf8'), 'sentinel')
+    } finally {
+      osu.close()
+      rmSync(target, { force: true })
+    }
   })
 
   it('AutoEdit commits an update that can be rolled back', async () => {

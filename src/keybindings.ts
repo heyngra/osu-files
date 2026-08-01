@@ -2,7 +2,8 @@ import Realm from 'realm'
 import type { KeyBinding } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { KeyBindingQuery } from './get/keybindings.get.js'
-import { createCrud } from './write/util.js'
+import type { QuerySurface } from './get/base.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { registerDefaults as registerDefaultsImpl, type RegisterWrite } from './keybindings/register.js'
 import type { KeyBindingDef, GlobalAction, RulesetAction, RulesetShortName } from './keybindings/types.js'
@@ -17,7 +18,7 @@ import { resolveAction, validateKeyCombo } from './keybindings/keys.js'
  * @example
  * const kb = db.keybindings.get.byRulesetNameEquals('osu')[0]
  */
-export function createKeyBindingModule(ctx: OsuFilesContext) {
+export function createKeyBindingModule(ctx: OsuFilesContext): KeyBindingModule {
   const q = new KeyBindingQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
   const get = q.proxify()
@@ -105,4 +106,26 @@ export function createKeyBindingModule(ctx: OsuFilesContext) {
 }
 
 /** Key binding sub-module with query and write operations. */
-export type KeyBindingModule = ReturnType<typeof createKeyBindingModule>
+export type KeyBindingModule = {
+  /** Queries readonly key-binding snapshots. */
+  readonly get: QuerySurface<KeyBinding, KeyBindingQuery>
+  /** Creates, updates, deletes, or upserts key bindings. */
+  readonly write: Crud<KeyBinding>
+  /** Registers default keybindings for a ruleset. */
+  registerDefaults(defaults: KeyBindingDef[], rulesetName?: RulesetShortName, variant?: number): { inserted: number; removed: number }
+  /** Registers built-in defaults for every ruleset. */
+  registerAllBuiltInDefaults(): { inserted: number; removed: number }
+  /** Returns keys assigned to an action. */
+  getActionKeys<RR extends RulesetShortName | undefined | null>(
+    rulesetName: RR,
+    actionName: RR extends keyof typeof RulesetAction ? keyof (typeof RulesetAction)[RR] : RR extends undefined | null ? keyof typeof GlobalAction : string,
+    variant?: number,
+  ): string[]
+  /** Replaces keys assigned to an action. */
+  setActionKeys<RR extends RulesetShortName | undefined | null>(
+    rulesetName: RR,
+    actionName: RR extends keyof typeof RulesetAction ? keyof (typeof RulesetAction)[RR] : RR extends undefined | null ? keyof typeof GlobalAction : string,
+    keys: string[],
+    variant?: number,
+  ): void
+}

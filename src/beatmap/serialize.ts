@@ -116,7 +116,7 @@ function serializeSliderExtras(e: SliderExtras): string {
     ? e.edgeAdditions.map(a => `${a.sampleSet}:${a.additionSet}`).join('|')
     : ''
   let tail = ''
-  if (e.sampleSet !== undefined || e.filename !== undefined) {
+  if (e.sampleSet !== undefined || e.additionSet !== undefined || e.customIndex !== undefined || e.sampleVolume !== undefined || e.filename !== undefined) {
     const parts = [
       e.sampleSet ?? 0,
       e.additionSet ?? 0,

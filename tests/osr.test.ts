@@ -73,7 +73,8 @@ describe('Parse .osr', () => {
     const p = parseOsrBinary(buf)
     assert.ok(p.rawReplayData.length > 0)
     assert.ok(p.replayFrames.length > 0)
-    assert.strictEqual(p.replayFrames.length, 1812)
+    assert.strictEqual(p.replayFrames.length, 7247)
+    assert.deepStrictEqual(p.replayFrames[0], { timeDelta: 0, mouseX: 256, mouseY: -500, keys: 0 })
   })
 
   it('has valid replay frame structure', () => {
@@ -128,6 +129,20 @@ describe('computeReplayMD5', () => {
     assert.strictEqual(result.length, 32)
     assert.match(result, /^[a-f0-9]{32}$/)
   })
+
+  it('formats negative western timezone offsets with one sign', () => {
+    const previous = process.env.TZ
+    process.env.TZ = 'America/New_York'
+    try {
+      assert.strictEqual(
+        computeReplayMD5('peppy', new Date('2023-01-15T12:30:00.000Z')),
+        '6a894eb293d39670dac1f72b63c28604',
+      )
+    } finally {
+      if (previous === undefined) delete process.env.TZ
+      else process.env.TZ = previous
+    }
+  })
 })
 
 describe('dateToTicks / ticksToDate round-trip', () => {
@@ -140,6 +155,14 @@ describe('dateToTicks / ticksToDate round-trip', () => {
 })
 
 describe('parseReplayFrames', () => {
+  it('parses Lazer pipe-delimited frames and skips the sentinel', () => {
+    const frames = parseReplayFrames('0|256|-500|0,157|253.5|167.75|0,-12345|0|0|1868605,')
+    assert.deepStrictEqual(frames, [
+      { timeDelta: 0, mouseX: 256, mouseY: -500, keys: 0 },
+      { timeDelta: 157, mouseX: 253.5, mouseY: 167.75, keys: 0 },
+    ])
+  })
+
   it('parses valid frame data', () => {
     const frames = parseReplayFrames('0,256,192,0,100,260,190,1')
     assert.strictEqual(frames.length, 2)
@@ -170,7 +193,7 @@ describe('Import .osr', { timeout: 60000 }, () => {
     assert.strictEqual(result.playerName, 'Cookiezi')
     assert.strictEqual(result.totalScore, 16638107)
     assert.strictEqual(result.mods.valueOf(), 88)
-    assert.strictEqual(result.replayFrames.length, 1812)
+    assert.strictEqual(result.replayFrames.length, 7247)
 
     const scores = osu.scores.get
     assert.strictEqual(scores.length, 1)
