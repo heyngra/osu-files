@@ -42,13 +42,13 @@ import type { RulesetShortName } from './types.js'
 
 export function resolveAction(rulesetName: RulesetShortName | undefined, actionName: string): number {
   if (rulesetName === undefined || rulesetName === null) {
-    const v = (GlobalAction as Record<string, number | undefined>)[actionName]
-    if (v === undefined) throw new Error(`Unknown global action '${actionName}'`)
+    const v = GlobalAction[actionName as keyof typeof GlobalAction]
+    if (typeof v !== 'number') throw new Error(`Unknown global action '${actionName}'`)
     return v
   }
-  const map = (RulesetAction as Record<string, Record<string, number> | undefined>)[rulesetName]
+  const map = RulesetAction[rulesetName as keyof typeof RulesetAction]
   if (!map) throw new Error(`Unknown ruleset '${rulesetName}'`)
-  const v = map[actionName]
-  if (v === undefined) throw new Error(`Unknown action '${actionName}' for ruleset '${rulesetName}'`)
+  const v = map[actionName as keyof typeof map]
+  if (typeof v !== 'number') throw new Error(`Unknown action '${actionName}' for ruleset '${rulesetName}'`)
   return v
 }

@@ -1,7 +1,13 @@
 export { parseOsu } from '../../src/beatmap/parse.js'
 export { serializeOsu } from '../../src/beatmap/serialize.js'
+export { SliderCurveType } from '../../src/beatmap/types.js'
 export { cloneSkinIni, parseSkinIni, serializeSkinIni } from '../../src/skin/skin-ini.js'
 export { FileRef } from '../../src/types.js'
+import { FileRef as BrowserFileRef } from '../../src/types.js'
+
+export function createFileRef(filename: string, source: { hash?: string; content?: Buffer }): BrowserFileRef {
+  return new BrowserFileRef(filename, source)
+}
 export {
   Storyboard, StoryboardLayer, StoryboardSprite, StoryboardAnimation, StoryboardSample,
   StoryboardCommandGroup, StoryboardLoopingGroup, StoryboardTriggerGroup,

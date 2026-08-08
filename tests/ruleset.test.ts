@@ -37,8 +37,8 @@ describe('Ruleset module', () => {
     const osu = init(join(root, 'client.realm'), { schemaVersion: 51 })
     try {
       osu.rulesets.write.create({ ShortName: 'taiko', OnlineID: 1, Name: 'osu!taiko', InstantiationInfo: '', Available: true, LastAppliedDifficultyVersion: 1 })
-      assert.strictEqual(osu.rulesets.get.byShortNameEquals('taiko').length, 1)
-      assert.strictEqual(osu.rulesets.get.byShortNameEquals('osu').length, 0)
+    assert.strictEqual(osu.rulesets.get.byShortName('taiko').length, 1)
+    assert.strictEqual(osu.rulesets.get.byShortName('osu').length, 0)
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
 
@@ -47,8 +47,8 @@ describe('Ruleset module', () => {
     const osu = init(join(root, 'client.realm'), { schemaVersion: 51 })
     try {
       osu.rulesets.write.create({ ShortName: 'fruits', OnlineID: 2, Name: 'osu!catch', InstantiationInfo: '', Available: true, LastAppliedDifficultyVersion: 1 })
-      assert.strictEqual(osu.rulesets.get.byOnlineIdExact(2).length, 1)
-      assert.strictEqual(osu.rulesets.get.byOnlineIdExact(0).length, 0)
+    assert.strictEqual(osu.rulesets.get.byOnlineId(2).length, 1)
+    assert.strictEqual(osu.rulesets.get.byOnlineId(0).length, 0)
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
 
@@ -68,7 +68,7 @@ describe('Ruleset module', () => {
     try {
       osu.rulesets.write.create({ ShortName: 'mania', OnlineID: 3, Name: 'osu!mania', InstantiationInfo: '', Available: true, LastAppliedDifficultyVersion: 1 })
       osu.rulesets.write.update('mania', { Name: 'osu!mania (updated)' })
-      assert.strictEqual(osu.rulesets.get.byShortNameEquals('mania')[0].Name, 'osu!mania (updated)')
+    assert.strictEqual(osu.rulesets.get.byShortName('mania')[0].Name, 'osu!mania (updated)')
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
 

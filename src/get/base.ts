@@ -1,5 +1,6 @@
 import Realm from 'realm'
 import { RealmClosedError } from '../realm-session.js'
+import type { RealmSession } from '../realm-session.js'
 import { EditSession } from '../edit-session.js'
 import { getConfig } from '../write/factory.js'
 import { ValidationError } from '../write/validate.js'
@@ -19,8 +20,7 @@ export type RealmWriteHooks = {
   log(entity: string, action: 'update' | 'delete', pk: unknown, before: unknown, after: unknown): void
 }
 
-/** Batch write operations returned by {@link EntityQuery.write}. */
-export type WriteOps<T> = {
+type WriteOperations<T> = {
   /**
    * Deletes every matched entity in one transaction.
    * @throws If a matched entity has protected references.
@@ -35,9 +35,8 @@ export type WriteOps<T> = {
   update(patch: Record<string, unknown>): number
 }
 
-/** A materialised query result with the same snapshot semantics as the array-like API. */
-export type QuerySnapshot<T> = ReadonlyArray<DeepReadonly<T>>
-export type QuerySurface<T, Q extends EntityQuery<T> = EntityQuery<T>> = Q & ReadonlyArray<DeepReadonly<T>>
+type InternalSnapshot<T> = ReadonlyArray<DeepReadonly<T>>
+type InternalSurface<T, Q extends EntityQuery<T> = EntityQuery<T>> = Q & ReadonlyArray<DeepReadonly<T>>
 
 function detach(value: unknown, seen = new Map<object, unknown>(), depth = 0): unknown {
   if (value === null || typeof value !== 'object') return value
@@ -81,7 +80,7 @@ export abstract class EntityQuery<T> {
   private _limit?: number
   private _detached = true
 
-  /** Cache the result after first terminal access. @default true */
+  /** Caches results after the first read. @default true */
   enableCache = true
 
   constructor(
@@ -94,10 +93,10 @@ export abstract class EntityQuery<T> {
   }
 
   /**
-   * Enables buffered edits while preserving further query chaining.
+   * Starts buffered editing without ending the result chain.
    *
    * @example
-   * using session = db.beatmaps.get.autoEdit().byAuthor('Monstrata')
+   * using session = db.beatmaps.get.autoEdit().byAuthorContains('Monstrata')
    * for (const beatmap of session)
    *   beatmap.Metadata!.Author!.Username = 'Sotarks'
    * // Commits automatically when the scope ends.
@@ -108,10 +107,7 @@ export abstract class EntityQuery<T> {
     return query.proxify() as unknown as EditSession<DeepMutable<T>>
   }
 
-  /**
-   * Limits the number of results.
-   * @example db.beatmaps.get.sortedBy('StarRating', false).limit(10)
-   */
+  /** Limits how many results array operations can return. @example db.beatmaps.get.sortedBy('StarRating', false).limit(10) */
   limit(n: number): this {
     if (!Number.isSafeInteger(n) || n < 0) throw new Error('[osu-files] limit must be a non-negative safe integer')
     const q = this._clone()
@@ -119,31 +115,27 @@ export abstract class EntityQuery<T> {
     return q
   }
 
-  /** Returns the number of matching objects without materialising them.
-   * `limit()` does not affect this count.
-   * @returns Number of Realm objects matching the current predicates.
-   */
-  /** Counts matched entities. */
+  /** Counts matches without applying `limit()`. */
   count(): number {
     if (this._realm.isClosed) throw new RealmClosedError()
     return (this._resultsCore(false) as { length: number }).length
   }
 
-  /** Returns the first matching object without materialising the full result set.
-   * @returns The first object in the current sort order, or `undefined`.
-   */
+  /** Returns the first matching object in the current sort order, or `undefined`. */
   first(): DeepReadonly<T> | undefined {
     if (this._realm.isClosed) throw new RealmClosedError()
     const results = this._resultsCore(true) as T[]
     return results.length > 0 ? (this._detached ? detach(results[0]) as DeepReadonly<T> : results[0] as DeepReadonly<T>) : undefined
   }
 
-  /** Materialises the query into a detached JavaScript array snapshot.
-   * @returns A new array containing the current query results.
-   */
-  /** Returns detached readonly snapshots. */
-  toArray(): QuerySnapshot<T> {
-    return this._eval().slice() as QuerySnapshot<T>
+  /** Returns matching read-only snapshots as a new JavaScript array. */
+  toArray(): InternalSnapshot<T> {
+    return this._eval().slice() as InternalSnapshot<T>
+  }
+
+  /** Returns the same snapshots as {@link toArray}. */
+  all(): InternalSnapshot<T> {
+    return this.toArray()
   }
 
   /** Commits buffered edits. */
@@ -160,10 +152,10 @@ export abstract class EntityQuery<T> {
    * Returns readonly Realm-backed values; this does not open a transaction or recalculate hashes.
    * Prefer {@link autoEdit} or {@link RealmSession} for writes.
    */
-  live(): QuerySurface<T, this> {
+  live(): InternalSurface<T, this> {
     const q = this._clone()
     q._detached = false
-    return q as unknown as QuerySurface<T, this>
+    return q as unknown as InternalSurface<T, this>
   }
 
   [Symbol.dispose](): void {
@@ -171,17 +163,16 @@ export abstract class EntityQuery<T> {
   }
 
   /**
-   * Batch write operations on the matched results.
+   * Applies batch writes to the matched results.
    *
-   * {@link WriteOps.delete delete} removes every matched entity in one Realm
-   * transaction. {@link WriteOps.update update} applies the same patch to
-   * every entity.
+   * `write.delete()` removes every matched entity in one Realm transaction.
+   * `write.update()` applies the same patch to every entity.
    *
    * @example
-   * db.beatmaps.get.byAuthor('Monstrata').write.delete()  // deletes all matched
+   * db.beatmaps.get.byAuthorContains('Monstrata').write.delete()  // deletes all matched
    * db.beatmaps.get.byBpmAbove(180).write.update({ Hidden: true })  // updates all matched
    */
-  get write(): WriteOps<T> {
+  get write(): WriteOperations<T> {
     const hooks = realmWriteHooks(this._realm)
     if (!hooks) throw new Error('[osu-files] Query is not attached to a database context')
     const cfg = getConfig(this._name)
@@ -246,7 +237,7 @@ export abstract class EntityQuery<T> {
    * delegate to the evaluated result array.
    * @example db.scores.get.sortedBy('Date').slice(0, 10)
    */
-  proxify(): QuerySurface<T, this> {
+  proxify(): InternalSurface<T, this> {
     const q = this
     return new Proxy(q, {
       get(_, p: string | symbol) {
@@ -258,7 +249,7 @@ export abstract class EntityQuery<T> {
           ? (...args: unknown[]) => Reflect.apply(val as (...args: unknown[]) => unknown, arr, args)
           : val
       },
-    }) as unknown as QuerySurface<T, this>
+    }) as unknown as InternalSurface<T, this>
   }
 
   /** @example db.scores.get.sortedBy('Date') */

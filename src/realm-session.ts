@@ -18,7 +18,10 @@ export class RealmReadOnlyError extends Error {
 
 /** A guarded Realm handle used by the high-level API.
  * @example
- * const beatmaps = db.realm.read(realm => [...realm.objects('Beatmap')])
+ * import type { RealmSession } from 'osu-files'
+ *
+ * const session = {} as RealmSession
+ * return session.isOpen
  */
 export class RealmSession {
   private closed = false
@@ -41,7 +44,10 @@ export class RealmSession {
    * Prefer {@link SkinEditor}, {@link BeatmapSetEditor}, {@link ScoreEditor},
    * and {@link OwnedFileEditor}.
    * @example
-   * db.realm.raw.write(() => db.realm.raw.create('Ruleset', data))
+   * import type { RealmSession } from 'osu-files'
+   *
+   * const session = {} as RealmSession
+   * return session.raw
    */
   get raw(): Realm {
     this.assertOpen()
@@ -53,7 +59,10 @@ export class RealmSession {
    *
    * The callback receives mutable Realm-owned objects. Changes are not synchronized.
    * @example
-   * const count = db.realm.read(realm => realm.objects('Score').length)
+   * import type { RealmSession } from 'osu-files'
+   *
+   * const session = {} as RealmSession
+   * return session.read(realm => realm.objects('Score').length)
    */
   read<T>(action: (realm: Realm) => T): T {
     this.assertOpen()
@@ -67,7 +76,10 @@ export class RealmSession {
    * references valid. Prefer {@link SkinEditor}, {@link BeatmapSetEditor},
    * {@link ScoreEditor}, and {@link OwnedFileEditor}.
    * @example
-   * db.realm.write(realm => realm.delete(score))
+   * import type { RealmSession } from 'osu-files'
+   *
+   * const session = {} as RealmSession
+   * return session.write(realm => realm.objects('Score').length)
    */
   write<T>(action: (realm: Realm) => T): T {
     this.assertOpen()

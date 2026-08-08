@@ -8,14 +8,14 @@ import { configureMonacoTypes } from '../runner/monaco-types.js'
 const props = withDefaults(defineProps<{
   id?: string
   code: string
-  execution?: 'interactive' | 'interactive-with-limitation' | 'static-node-only'
+  execution?: 'interactive' | 'interactive-with-limitation' | 'interactive-fixture' | 'static-node-only'
   title?: string
   output?: string
   fixture?: string
-}>(), { execution: 'interactive', fixture: 'realm-docs' })
+  initiallyActive?: boolean
+}>(), { execution: 'interactive', fixture: 'realm-docs', initiallyActive: false })
 
 const editorHost = ref<HTMLElement>()
-const fallback = ref(props.code)
 const source = ref(props.code)
 const result = ref(props.output)
 const logs = ref<Array<{ level: string; args: string[] }>>([])
@@ -26,11 +26,12 @@ const running = ref(false)
 const editorReady = ref(false)
 const runnable = computed(() => props.execution !== 'static-node-only')
 type RunnerState = 'preview' | 'loading' | 'ready' | 'failed' | 'static-node-only'
-const state = ref<RunnerState>(runnable.value ? 'preview' : 'static-node-only')
+const state = ref<RunnerState>(props.initiallyActive && runnable.value ? 'loading' : (runnable.value ? 'preview' : 'static-node-only'))
 const loadError = ref('')
 const hasErrors = computed(() => diagnostics.value.some(diagnostic => diagnostic.severity === 'error') || typeDiagnostics.value.some(diagnostic => diagnostic.severity === 8))
 const exampleId = computed(() => props.id ?? (props.title ?? 'example').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))
 const fileName = computed(() => `${exampleId.value}.ts`)
+const fixtureUrl = computed(() => `/fixtures/${props.fixture}.json`)
 const storageKey = computed(() => `osu-files:docs:runner:${exampleId.value}`)
 const activeTab = ref<'output' | 'console' | 'problems'>('output')
 const confirmReset = ref(false)
@@ -43,6 +44,7 @@ let pendingRun = false
 let lintTimer: number | undefined
 let runTimer: number | undefined
 let themeObserver: MutationObserver | undefined
+let editorLoadPromise: Promise<void> | undefined
 
 type SessionRunnerState = { loaded: true; source: string }
 
@@ -103,8 +105,13 @@ function scheduleRun() {
   runTimer = window.setTimeout(() => { if (!running.value) run() }, 350)
 }
 
-function run() {
-  if (!runnable.value || hasErrors.value) return
+async function run() {
+  if (!runnable.value) return
+  if (!editorReady.value) {
+    await loadEditor()
+    if (!editorReady.value) return
+  }
+  if (hasErrors.value) return
   if (running.value) { pendingRun = true; return }
   pendingRun = false
   error.value = ''
@@ -122,17 +129,17 @@ function run() {
     worker.terminate(); activeWorker = undefined
     finishRun()
   }
-  worker.postMessage({ source: source.value, fixtureUrl: '/fixtures/realm-docs.json' })
+  const execution = props.execution === 'static-node-only' ? 'interactive' : (props.execution ?? 'interactive')
+  worker.postMessage({ source: source.value, fixtureUrl: fixtureUrl.value, execution })
 }
 
 function reset() {
   confirmReset.value = false
   window.clearTimeout(runTimer)
   pendingRun = false
-  if (!editorReady.value) { clearSession(); source.value = props.code; fallback.value = props.code; return }
+  if (!editorReady.value) { clearSession(); source.value = props.code; return }
   stop()
   source.value = props.code
-  fallback.value = props.code
   model?.setValue(props.code)
   result.value = props.output ?? 'Run the example to inspect its return value.'
   logs.value = []
@@ -205,13 +212,23 @@ function defineThemes() {
 }
 
 async function loadEditor() {
-  if (!runnable.value || state.value === 'loading' || state.value === 'ready') return
+  if (state.value === 'ready') return
+  if (editorLoadPromise) return editorLoadPromise
+  editorLoadPromise = loadEditorInternal()
+  try {
+    await editorLoadPromise
+  } finally {
+    editorLoadPromise = undefined
+  }
+}
+
+async function loadEditorInternal() {
+  if (state.value === 'ready') return
   state.value = 'loading'
   loadError.value = ''
   const saved = readSession()
   const initialSource = saved?.source ?? props.code
   source.value = initialSource
-  fallback.value = initialSource
   try {
     await nextTick()
     if (!editorHost.value) throw new Error('The editor container was not mounted.')
@@ -251,7 +268,6 @@ async function loadEditor() {
     editor.addAction({ id: 'run-example', label: 'Run example', keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter], run })
     editor.onDidChangeModelContent(() => {
       source.value = model.getValue()
-      fallback.value = source.value
       writeSession()
       window.clearTimeout(lintTimer)
       lintTimer = window.setTimeout(updateDiagnostics, 220)
@@ -274,25 +290,25 @@ watch([diagnostics, typeDiagnostics], ([lint, types]) => {
 })
 
 onMounted(() => {
-  if (!runnable.value) return
   const saved = readSession()
-  if (saved) { source.value = saved.source; fallback.value = saved.source }
-  run()
-  if (saved?.loaded) void loadEditor()
+  if (saved) source.value = saved.source
+  if (props.initiallyActive && runnable.value) void loadEditor()
 })
 
 onBeforeUnmount(() => { window.clearTimeout(lintTimer); window.clearTimeout(runTimer); themeObserver?.disconnect(); stop(); editor?.dispose(); model?.dispose() })
 </script>
 
 <template>
-  <section class="api-example" :data-execution="execution">
+  <section :id="exampleId" class="api-example" :data-execution="execution">
     <header class="api-example__bar">
       <span class="api-example__tab" :title="fileName">{{ fileName }}</span>
       <span class="api-example__spacer" />
-      <template v-if="runnable">
-        <button class="api-example__btn api-example__btn--primary api-example__run" @click="run" :disabled="running || hasErrors" aria-label="Run (Ctrl+Enter)" data-tip="Run (Ctrl+Enter)">
+      <template v-if="runnable && state === 'ready'">
+        <button class="api-example__btn api-example__btn--primary api-example__run" @click="run" :disabled="running || !editorReady || hasErrors" aria-label="Run (Ctrl+Enter)" data-tip="Run (Ctrl+Enter)">
           <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 3.2a.7.7 0 0 1 1.06-.6l7.1 4.8a.7.7 0 0 1 0 1.2l-7.1 4.8A.7.7 0 0 1 4 12.8z" /></svg>
         </button>
+      </template>
+      <template v-if="state === 'ready'">
         <button class="api-example__btn" @click="copy" aria-label="Copy code" data-tip="Copy code">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 5.5v-2a1.5 1.5 0 0 0-1.5-1.5H4.5A1.5 1.5 0 0 0 3 3.5v4.5a1.5 1.5 0 0 0 1.5 1.5h2" /></svg>
         </button>
@@ -303,15 +319,27 @@ onBeforeUnmount(() => { window.clearTimeout(lintTimer); window.clearTimeout(runT
     </header>
 
     <div class="api-example__body">
-      <div v-if="runnable && state !== 'ready'" class="api-example__preview-wrap">
-        <pre class="api-example__preview" aria-hidden="true"><code>{{ source }}</code></pre>
-        <div class="api-example__load-overlay">
-          <button class="api-example__load" @click="loadEditor" :disabled="state === 'loading'">{{ state === 'loading' ? 'Loading…' : 'Load' }}</button>
-          <p v-if="state === 'failed'" class="api-example__load-error">{{ loadError }}</p>
-        </div>
+      <div v-if="state === 'preview' || state === 'failed' || state === 'static-node-only'" class="api-example__preview-wrap language-ts vp-adaptive-theme">
+        <span class="lang">ts</span>
+        <pre class="shiki shiki-themes github-light github-dark vp-code api-example__preview" tabindex="0" aria-label="TypeScript preview"><code>{{ source }}</code></pre>
+        <button
+          v-if="runnable"
+          class="api-example__activate"
+          @click="loadEditor"
+          :disabled="state === 'loading'"
+          :aria-label="state === 'loading' ? 'Loading runnable example' : 'Make example runnable'"
+          :data-tip="state === 'loading' ? 'Loading runnable example' : 'Make example runnable'"
+        >
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.25 3.35a.75.75 0 0 1 1.14-.64l7.2 4.65a.75.75 0 0 1 0 1.28l-7.2 4.65a.75.75 0 0 1-1.14-.64z" /></svg>
+        </button>
+        <p v-if="state === 'failed'" class="api-example__load-error">{{ loadError }}</p>
       </div>
-      <div v-if="runnable && (state === 'loading' || state === 'ready')" ref="editorHost" class="api-example__editor" aria-label="Editable TypeScript example" />
-      <pre v-if="!runnable" class="api-example__static"><code>{{ fallback }}</code></pre>
+      <div v-if="state === 'loading' || state === 'ready'" ref="editorHost" class="api-example__editor" aria-label="Editable TypeScript example" />
+    </div>
+
+    <div v-if="!runnable" class="api-example__static-result" aria-live="polite">
+      <p>This example needs Node.js.</p>
+      <OutputPanel :value="result" />
     </div>
 
     <div v-if="runnable && state === 'ready'" class="api-example__result" aria-live="polite">
@@ -340,7 +368,7 @@ onBeforeUnmount(() => { window.clearTimeout(lintTimer); window.clearTimeout(runT
       </div>
     </div>
 
-    <div v-if="confirmReset && runnable" class="api-example__confirm">
+    <div v-if="confirmReset" class="api-example__confirm">
       <p>Reset the example to its default code?</p>
       <div class="api-example__confirm-actions">
         <button class="api-example__btn api-example__btn--text api-example__btn--danger" @click="reset">Confirm</button>
@@ -352,6 +380,7 @@ onBeforeUnmount(() => { window.clearTimeout(lintTimer); window.clearTimeout(runT
 
 <style scoped>
 .api-example { position: relative; margin: .8rem 0; border: 1px solid var(--vp-c-divider); border-radius: 10px; background: var(--vp-c-bg-soft); color: var(--vp-c-text-1); }
+.api-example[data-execution="interactive"] {grid-column: 1 / -1;}
 .api-example__bar { display: flex; align-items: center; gap: .3rem; height: 1.8rem; padding: 0 .45rem; border-bottom: 1px solid var(--vp-c-divider); }
 .api-example__tab { display: inline-flex; align-items: center; color: var(--vp-c-text-3); font: 500 .7rem/1 var(--vp-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); }
 .api-example__spacer { flex: 1; }
@@ -365,7 +394,9 @@ onBeforeUnmount(() => { window.clearTimeout(lintTimer); window.clearTimeout(runT
 .api-example__btn--text { width: auto; height: auto; padding: .38rem .65rem; font: 600 .7rem/1 var(--vp-font-family-base, inherit); }
 .api-example__btn--danger:hover:not(:disabled) { background: var(--vp-c-danger-soft); color: var(--vp-c-danger-1); }
 .api-example__btn[data-tip]:hover::after,
-.api-example__btn[data-tip]:focus-visible::after {
+.api-example__btn[data-tip]:focus-visible::after,
+.api-example__activate[data-tip]:hover::after,
+.api-example__activate[data-tip]:focus-visible::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 5px);
@@ -384,15 +415,17 @@ onBeforeUnmount(() => { window.clearTimeout(lintTimer); window.clearTimeout(runT
 .api-example__body { position: relative; }
 .api-example__editor { height: 11rem; }
 .api-example__preview-wrap { position: relative; overflow: hidden; }
-.api-example__preview { min-height: 11rem; margin: 0; overflow: hidden; padding: .6rem .8rem; background: transparent; color: var(--vp-c-text-3); font: .75rem/1.6 var(--vp-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); filter: blur(2px); opacity: .6; user-select: none; }
+.api-example__preview-wrap .lang { position: absolute; top: .55rem; left: .8rem; z-index: 1; color: var(--vp-c-text-3); font: 600 .62rem/1 var(--vp-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); letter-spacing: .04em; text-transform: lowercase; }
+.api-example__preview { min-height: 11rem; max-height: 18rem; margin: 0; overflow: auto; padding: 1.65rem .8rem .8rem; background: transparent; color: var(--vp-c-text-1); font: .75rem/1.6 var(--vp-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); }
 .api-example__preview code { white-space: pre-wrap; }
-.api-example__load-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .45rem; }
-.api-example__load { border: 1px solid var(--vp-c-divider); border-radius: 7px; padding: .32rem .7rem; background: var(--vp-c-bg); color: var(--vp-c-text-2); cursor: pointer; font: 500 .72rem/1 var(--vp-font-family-base, inherit); transition: color .16s ease, border-color .16s ease, transform .16s ease; }
-.api-example__load:hover:not(:disabled) { color: var(--vp-c-brand-1); border-color: var(--vp-c-brand-2); }
-.api-example__load:disabled { cursor: wait; opacity: .6; }
-.api-example__load-error { margin: 0; border-radius: 6px; padding: .28rem .55rem; background: var(--vp-c-danger-soft); color: var(--vp-c-danger-1); font: .72rem/1.4 var(--vp-font-family-mono, ui-monospace, Menlo, Consolas, monospace); text-align: center; }
-.api-example__static { margin: 0; overflow: auto; padding: .6rem .8rem; background: transparent; color: var(--vp-c-text-1); font: .75rem/1.6 var(--vp-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); }
-.api-example__static code { white-space: pre-wrap; }
+.api-example__activate { position: absolute; top: .35rem; right: .45rem; z-index: 2; display: inline-flex; align-items: center; justify-content: center; width: 1.65rem; height: 1.65rem; border: 1px solid var(--vp-c-divider); border-radius: 6px; background: var(--vp-c-bg); color: var(--vp-c-text-2); cursor: pointer; transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease; }
+.api-example__activate svg { width: .88rem; height: .88rem; }
+.api-example__activate:hover:not(:disabled), .api-example__activate:focus-visible { border-color: var(--vp-c-brand-2); background: var(--vp-c-brand-soft); color: var(--vp-c-brand-1); }
+.api-example__activate:active:not(:disabled) { transform: scale(.92); }
+.api-example__activate:disabled { cursor: wait; opacity: .6; }
+.api-example__load-error { position: absolute; right: .8rem; bottom: .65rem; left: .8rem; margin: 0; border-radius: 6px; padding: .28rem .55rem; background: var(--vp-c-danger-soft); color: var(--vp-c-danger-1); font: .72rem/1.4 var(--vp-font-family-mono, ui-monospace, Menlo, Consolas, monospace); text-align: center; }
+.api-example__static-result { border-top: 1px solid var(--vp-c-divider); padding: .65rem .8rem .75rem; background: var(--vp-c-bg-alt); }
+.api-example__static-result p { margin: 0 0 .55rem; color: var(--vp-c-text-3); font-size: .72rem; line-height: 1.45; }
 .api-example__result { border-top: 1px solid var(--vp-c-divider); border-radius: 0 0 10px 10px; background: var(--vp-c-bg-alt); }
 .api-example__tabs { display: flex; align-items: center; gap: .05rem; padding: .3rem .45rem 0; border-bottom: 1px solid var(--vp-c-divider); }
 .api-example__tabs button { display: inline-flex; align-items: center; gap: .3rem; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: .25rem .5rem .3rem; background: transparent; color: var(--vp-c-text-3); cursor: pointer; font: 500 .72rem/1 var(--vp-font-family-base, inherit); transition: color .16s ease, border-color .16s ease; }

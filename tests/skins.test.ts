@@ -275,7 +275,7 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
     const osu = init(join(queryRoot, 'client.realm'), { schemaVersion: 51, filesFolderPath: join(queryRoot, 'files') })
     const result = await osu.osk.import(SAMPLE_OSK)
 
-    const foundHash = osu.skins.get.byHashEquals(result.hash)
+    const foundHash = osu.skins.get.byHash(result.hash)
     assert.strictEqual(foundHash.length, 1)
 
     const foundCreator = osu.skins.get.byCreatorContains('cyperdark')

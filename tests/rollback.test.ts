@@ -5,7 +5,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { init, RollbackEntry } from '../src/index.js'
 
-describe('Rollback — logging', { timeout: 60000 }, () => {
+describe('Rollback - logging', { timeout: 60000 }, () => {
   const tmpRoot = join(tmpdir(), `osu-files-test-rollback-${Date.now()}`)
   const realmPath = join(tmpRoot, 'client.realm')
 
@@ -160,6 +160,7 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
     assert.strictEqual(osu.beatmaps.get.byBpmBetween(99, 201).limit(2).count(), initialCount + 3)
     assert.strictEqual(osu.beatmaps.get.sortedBy('BPM', false).byBpmBetween(199, 201).first()!.BPM, 200)
     assert.strictEqual(osu.beatmaps.get.byBpmBetween(99, 201).limit(2).toArray().length, 2)
+    assert.strictEqual(osu.beatmaps.get.byBpmBetween(99, 201).limit(2).all().length, 2)
     osu.close()
   })
 
@@ -212,7 +213,7 @@ describe('Rollback — logging', { timeout: 60000 }, () => {
   })
 })
 
-describe('Rollback — revert', { timeout: 60000 }, () => {
+describe('Rollback - revert', { timeout: 60000 }, () => {
   const tmpRoot = join(tmpdir(), `osu-files-test-rollback-revert-${Date.now()}`)
   const realmPath = join(tmpRoot, 'client.realm')
 

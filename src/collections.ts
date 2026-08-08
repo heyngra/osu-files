@@ -3,15 +3,20 @@ import Realm from 'realm'
 import type { BeatmapCollection } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { CollectionQuery } from './get/collections.get.js'
-import type { QuerySurface } from './get/base.js'
+import type { Collections } from './get/facades.js'
+import type { CollectionSnapshot } from './types/readonly.js'
 import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { readLegacyCollectionDb, writeLegacyCollectionDb, type LegacyCollectionEntry } from './collections/legacy.js'
 import { assertWritable, markChanged, writeRealm } from './context.js'
 
 export type { LegacyCollectionEntry } from './collections/legacy.js'
+
+type CollectionExportInput = BeatmapCollection | CollectionSnapshot
+type CollectionExportSource = CollectionExportInput | Iterable<CollectionExportInput>
+
 /**
- * Creates the beatmap collection sub-module with query and write operations.
+ * Creates the collection module with read-only results and write operations.
  * @example
  * const col = db.collections.get.byNameContains('Favorite')[0]
  */
@@ -22,7 +27,7 @@ export function createCollectionModule(ctx: OsuFilesContext): BeatmapCollectionM
   const write = createCrud<BeatmapCollection>(ctx, getConfig('BeatmapCollection')!)
 
   return {
-    get,
+    get: get as unknown as Collections,
     write,
 
     /**
@@ -71,17 +76,17 @@ export function createCollectionModule(ctx: OsuFilesContext): BeatmapCollectionM
      * @returns Buffer containing the binary collection.db data.
      * @example
      * const all = writeFileSync('collection.db', db.collections.exportLegacy(db.collections.get))
-     * const one = writeFileSync('out.db', db.collections.exportLegacy(db.collections.get.byNameEquals('Favs')[0]))
+     * const one = writeFileSync('out.db', db.collections.exportLegacy(db.collections.get.byName('Favs')[0]))
      * const some = writeFileSync('out.db', db.collections.exportLegacy(db.collections.get.byNameContains('Fav')))
      */
-    exportLegacy(collection: BeatmapCollection | BeatmapCollection[]): Buffer {
+    exportLegacy(collection: CollectionExportSource): Buffer {
       const items = Array.isArray(collection) ? collection
         : Symbol.iterator in collection
           ? [...collection as unknown as BeatmapCollection[]]
           : [collection]
       const entries: LegacyCollectionEntry[] = items.map(c => ({
         name: c.Name ?? '',
-        beatmapMD5s: (c.BeatmapMD5Hashes ?? []).filter((h): h is string => !!h),
+        beatmapMD5s: [...(c.BeatmapMD5Hashes ?? [])].filter((h): h is string => !!h),
       }))
       return writeLegacyCollectionDb(entries)
     },
@@ -106,14 +111,14 @@ export function createCollectionModule(ctx: OsuFilesContext): BeatmapCollectionM
 }
 
 export type BeatmapCollectionModule = {
-  /** Queries readonly collection snapshots. */
-  readonly get: QuerySurface<BeatmapCollection, CollectionQuery>
+  /** Returns read-only collection snapshots through `get`. */
+  readonly get: Collections
   /** Creates, updates, deletes, or upserts collections. */
   readonly write: Crud<BeatmapCollection>
   /** Imports an osu!stable collection.db into the Realm database. */
   importLegacy(filePath: string): { imported: number; merged: number }
-  /** Exports one or more collections to the legacy osu!stable binary format. */
-  exportLegacy(collection: BeatmapCollection | BeatmapCollection[]): Buffer
+  /** Exports a collection, snapshot, or iterable of either to osu!stable's legacy binary format. */
+  exportLegacy(collection: BeatmapCollection | CollectionSnapshot | Iterable<BeatmapCollection | CollectionSnapshot>): Buffer
   /** Adds one beatmap MD5 to a collection. */
   addBeatmap(collectionId: string, md5: string): void
   /** Removes one beatmap MD5 from a collection. */

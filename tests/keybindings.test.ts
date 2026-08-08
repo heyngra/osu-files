@@ -34,7 +34,7 @@ describe('KeyBinding module', () => {
       osu.keybindings.write.create({ ID: new Realm.BSON.UUID(), RulesetName: 'osu', Action: 0, KeyCombination: 'Z' })
       osu.keybindings.write.create({ ID: new Realm.BSON.UUID(), RulesetName: 'osu', Action: 1, KeyCombination: 'X' })
       osu.keybindings.write.create({ ID: new Realm.BSON.UUID(), Action: 2, KeyCombination: 'Escape' })
-      assert.strictEqual(osu.keybindings.get.byRulesetNameEquals('osu').length, 2)
+    assert.strictEqual(osu.keybindings.get.byRulesetName('osu').length, 2)
       assert.strictEqual(osu.keybindings.get.length, 3)
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
@@ -46,7 +46,7 @@ describe('KeyBinding module', () => {
       const r = osu.keybindings.registerDefaults(OSU_DEFAULTS, 'osu', 0)
       assert.strictEqual(r.inserted, OSU_DEFAULTS.length)
       assert.strictEqual(r.removed, 0)
-      assert.strictEqual(osu.keybindings.get.byRulesetNameEquals('osu').length, OSU_DEFAULTS.length)
+    assert.strictEqual(osu.keybindings.get.byRulesetName('osu').length, OSU_DEFAULTS.length)
 
       const leftButtons = osu.keybindings.get.filter(k => k.RulesetName === 'osu' && k.Action === 0)
       assert.strictEqual(leftButtons.length, 2)
@@ -64,7 +64,7 @@ describe('KeyBinding module', () => {
       assert.strictEqual(osu.keybindings.get.length, 3)
       const r = osu.keybindings.registerDefaults(OSU_DEFAULTS, 'osu', 0)
       assert.strictEqual(r.removed, 1)
-      assert.strictEqual(osu.keybindings.get.byRulesetNameEquals('osu').length, OSU_DEFAULTS.length)
+    assert.strictEqual(osu.keybindings.get.byRulesetName('osu').length, OSU_DEFAULTS.length)
 
       const leftButtons = osu.keybindings.get.filter(k => k.RulesetName === 'osu' && k.Action === 0)
       assert.strictEqual(leftButtons.length, 2)

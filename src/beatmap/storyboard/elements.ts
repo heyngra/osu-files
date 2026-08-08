@@ -5,6 +5,7 @@ import {
 } from './commands.js'
 import type { Storyboard } from './storyboard.js'
 
+/** A drawable storyboard sprite backed by a file reference and command groups. */
 export class StoryboardSprite {
   source: StoryboardElementSource = 'beatmap'
   file: FileRef
@@ -15,6 +16,7 @@ export class StoryboardSprite {
   triggerGroups: StoryboardTriggerGroup[] = []
 
   private __sb?: Storyboard
+  /** @internal */
   get _sb(): Storyboard | undefined { return this.__sb }
   set _sb(sb: Storyboard | undefined) {
     this.__sb = sb
@@ -55,6 +57,7 @@ export class StoryboardSprite {
     return t
   }
 
+  /** Adds a fade command and returns this sprite for chaining. */
   addAlpha(easing: Easing, startTime: number, endTime?: number, endValue?: number, startValue?: number): this { this._touch(); this.commands.addAlpha(easing, startTime, endTime, endValue, startValue); return this }
   addMoveX(easing: Easing, startTime: number, endTime?: number, endValue?: number, startValue?: number): this { this._touch(); this.commands.addX(easing, startTime, endTime, endValue, startValue); return this }
   addMoveY(easing: Easing, startTime: number, endTime?: number, endValue?: number, startValue?: number): this { this._touch(); this.commands.addY(easing, startTime, endTime, endValue, startValue); return this }
@@ -133,6 +136,7 @@ export class StoryboardSprite {
   }
 }
 
+/** A sprite that displays a sequence of numbered frames. */
 export class StoryboardAnimation extends StoryboardSprite {
   frameCount: number
   frameDelay: number
@@ -162,6 +166,7 @@ export class StoryboardAnimation extends StoryboardSprite {
   }
 }
 
+/** An audio sample played at a fixed storyboard time. */
 export class StoryboardSample {
   source: StoryboardElementSource = 'beatmap'
   file: FileRef
@@ -171,6 +176,7 @@ export class StoryboardSample {
   get path(): string { return this.file.filename }
 
   private __sb?: Storyboard
+  /** @internal */
   get _sb(): Storyboard | undefined { return this.__sb }
   set _sb(sb: Storyboard | undefined) { this.__sb = sb }
 

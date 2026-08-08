@@ -208,7 +208,18 @@ function parseElement(line: string, sb: Storyboard, formatVersion: number): Stor
   return null
 }
 
-/** Parse raw storyboard text (from .osu [Events] section) into a typed Storyboard. */
+/**
+ * Parse raw storyboard text from an osu! `[Events]` section.
+ * @example
+ * import { parseStoryboard } from 'osu-files'
+ *
+ * const storyboard = parseStoryboard(storyboardSource)
+ *
+ * return {
+ *   layers: storyboard.layers.size,
+ *   drawable: storyboard.hasDrawable,
+ * }
+ */
 export function parseStoryboard(rawText: string, formatVersion = 14): Storyboard {
   const sb = new Storyboard()
   sb._rawText = rawText
@@ -257,7 +268,18 @@ export function parseStoryboard(rawText: string, formatVersion = 14): Storyboard
   return sb
 }
 
-/** Parse a full .osb file content into a Storyboard with its variable definitions. */
+/**
+ * Parse a full `.osb` file into a storyboard and its variable definitions.
+ * @example
+ * import { parseOsb } from 'osu-files'
+ *
+ * const parsed = parseOsb(osbSource)
+ *
+ * return {
+ *   layers: parsed.storyboard.layers.size,
+ *   variables: Object.keys(parsed.variables).length,
+ * }
+ */
 export function parseOsb(content: string): { storyboard: Storyboard; variables: Record<string, string> } {
   const variables: Record<string, string> = {}
   let useSkinSprites = false

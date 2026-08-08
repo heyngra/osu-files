@@ -139,24 +139,52 @@ function serializeElements(storyboard: Storyboard, source?: 'beatmap' | 'shared'
   return lines.join('\n')
 }
 
-/** Serialize a Storyboard into text for the [Events] section. */
+/**
+ * Serialize a Storyboard into text for an osu! `[Events]` section.
+ * @example
+ * import { parseStoryboard, serializeStoryboard } from 'osu-files'
+ *
+ * const storyboard = parseStoryboard(storyboardSource)
+ * return serializeStoryboard(storyboard)
+ */
 export function serializeStoryboard(storyboard: Storyboard): string {
   if (!storyboard._dirty && storyboard._rawText) return storyboard._rawText
   return serializeElements(storyboard)
 }
 
-/** Serialize only beatmap-source elements for embedding into .osu files. */
+/**
+ * Serialize only beatmap-source elements for embedding into `.osu` files.
+ * @example
+ * import { parseStoryboard, serializeStoryboardForOsu } from 'osu-files'
+ *
+ * const storyboard = parseStoryboard(storyboardSource)
+ * return serializeStoryboardForOsu(storyboard)
+ */
 export function serializeStoryboardForOsu(storyboard: Storyboard): string {
   if (!storyboard._dirty && storyboard._rawText) return storyboard._rawText
   return serializeElements(storyboard, 'beatmap')
 }
 
-/** Serialize only shared-source elements for writing to .osb files. */
+/**
+ * Serialize only shared-source elements for writing to `.osb` files.
+ * @example
+ * import { parseStoryboard, serializeStoryboardForOsb } from 'osu-files'
+ *
+ * const storyboard = parseStoryboard(storyboardSource)
+ * return serializeStoryboardForOsb(storyboard)
+ */
 export function serializeStoryboardForOsb(storyboard: Storyboard): string {
   return serializeElements(storyboard, 'shared')
 }
 
-/** Serialize a Storyboard with variables into a full .osb file. */
+/**
+ * Serialize a Storyboard and variables into a full `.osb` file.
+ * @example
+ * import { parseOsb, serializeOsb } from 'osu-files'
+ *
+ * const parsed = parseOsb(osbSource)
+ * return serializeOsb(parsed.storyboard, parsed.variables)
+ */
 export function serializeOsb(storyboard: Storyboard, variables: Record<string, string>): string {
   const sections: string[] = []
 

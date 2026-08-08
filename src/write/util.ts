@@ -27,13 +27,41 @@ export type UpdatePatch<T> = keyof T extends 'Hash'
   : Partial<Omit<T, ProtectedUpdateKeys<T>>>
 
 export type Crud<T> = {
-  /** Creates one entity. @example db.beatmaps.write.create(data) */
+  /**
+   * Creates one entity.
+   * @example
+   * import type { Crud } from 'osu-files'
+   *
+   * const crud = {} as Crud<unknown>
+   * return crud.create({})
+   */
   create(input: Record<string, unknown>): T
-  /** Updates one entity by ID. Protected fields are rejected. @example db.skins.write.update(id, { Name: 'Renamed' }) */
+  /**
+   * Updates one entity by ID. Protected fields are rejected.
+   * @example
+   * import type { Crud } from 'osu-files'
+   *
+   * const crud = {} as Crud<unknown>
+   * return crud.update('id', {})
+   */
   update(id: unknown, patch: UpdatePatch<T>): T
-  /** Deletes one entity by ID. @example db.beatmaps.write.delete(id) */
+  /**
+   * Deletes one entity by ID.
+   * @example
+   * import type { Crud } from 'osu-files'
+   *
+   * const crud = {} as Crud<unknown>
+   * return crud.delete('id')
+   */
   delete(id: unknown): boolean
-  /** Creates an entity or updates the existing one. @example db.files.write.upsert({ Hash: hash }) */
+  /**
+   * Creates an entity or updates the existing one.
+   * @example
+   * import type { Crud } from 'osu-files'
+   *
+   * const crud = {} as Crud<unknown>
+   * return crud.upsert({})
+   */
   upsert(input: Record<string, unknown>): T
 }
 

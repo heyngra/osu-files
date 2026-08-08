@@ -28,11 +28,15 @@
     "docs:fixture": "tsx tools/docs/generate-realm-fixture.ts",
     "docs:api": "typedoc --options typedoc.config.mjs",
     "docs:manifest": "tsx tools/docs/generate-api-manifest.ts",
+    "docs:guides": "tsx tools/docs/generate-guides.ts",
     "docs:excludes": "tsx tools/docs/apply-api-excludes.ts",
+    "docs:facades": "tsx tools/docs/generate-facade-pages.ts",
+    "docs:normalize": "tsx tools/docs/normalize-function-pages.ts",
+    "docs:api-examples": "tsx tools/docs/generate-api-examples.ts",
     "docs:runner-types": "tsx tools/docs/generate-runner-types.ts",
     "docs:check": "tsx tools/docs/check-docs.ts",
-    "docs:build": "npm run build && npm run docs:fixture && npm run docs:api && npm run docs:manifest && npm run docs:excludes && npm run docs:runner-types && npm run docs:check && vitepress build docs",
-    "docs:dev": "vitepress dev docs",
+    "docs:build": "npm run build && npm run docs:fixture && npm run docs:api && npm run docs:manifest && npm run docs:guides && npm run docs:excludes && npm run docs:facades && npm run docs:normalize && npm run docs:api-examples && npm run docs:runner-types && npm run docs:check && vitepress build docs",
+    "docs:dev": "npm run docs:guides && vitepress dev docs",
     "docs:test": "playwright test"
   },
   "dependencies": {

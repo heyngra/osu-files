@@ -3,7 +3,7 @@ import type { File, RealmFile } from './schema/types.js'
 import { FileRef } from './types.js'
 import type { OsuFilesContext } from './context.js'
 import { FileQuery } from './get/files.get.js'
-import type { QuerySurface } from './get/base.js'
+import type { Files } from './get/facades.js'
 import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { fileStoragePath } from './util.js'
@@ -119,16 +119,16 @@ function containsValue(value: unknown, needle: string): boolean {
 }
 
 /**
- * Creates the file sub-module with query, write, and orphan cleanup operations.
+ * Creates the file module with read-only results, write operations, and orphan cleanup.
  * @example
- * const f = db.files.get.byHashEquals(hash)[0]
+ * const f = db.files.get.byHash(hash)[0]
  */
 export function createFileModule(ctx: OsuFilesContext) {
   const fileQuery = new FileQuery(ctx.realm)
   fileQuery.enableCache = ctx.queryCache ?? true
   const get = fileQuery.proxify()
   return {
-    get,
+    get: get as unknown as Files,
     store: ctx.fileStore,
     /** Stores a verified content-addressed file.
      * @example
@@ -171,11 +171,11 @@ export function createFileModule(ctx: OsuFilesContext) {
   }
 }
 
-/** File sub-module with query, write, and orphan cleanup operations. */
+/** File module with read-only results, write operations, and orphan cleanup. */
 export type FileUpdatePatch = never
 export interface FileModule {
-  /** Queries readonly file snapshots. */
-  readonly get: QuerySurface<File, FileQuery>
+  /** Returns read-only file snapshots through `get`. */
+  readonly get: Files
   /** Stores files in the content-addressed store. */
   readonly store?: FileStore
   /** Stores a file and returns its hash. */

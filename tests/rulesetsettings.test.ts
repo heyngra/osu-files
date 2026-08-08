@@ -102,8 +102,8 @@ describe('RulesetSetting module', () => {
     try {
       for (const [k, v] of Object.entries({ KeyA: 'valA' }))
         osu.rulesetSettings.setSetting('taiko', k, v)
-      assert.strictEqual(osu.rulesetSettings.get.byRulesetNameEquals('taiko').length, 1)
-      assert.strictEqual(osu.rulesetSettings.get.byRulesetNameEquals('taiko')[0].Key, 'KeyA')
+      assert.strictEqual(osu.rulesetSettings.get.byRulesetName('taiko').length, 1)
+      assert.strictEqual(osu.rulesetSettings.get.byRulesetName('taiko')[0].Key, 'KeyA')
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
 })

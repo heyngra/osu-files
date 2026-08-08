@@ -57,20 +57,32 @@ export * from './schema/index.js'
 export { RollbackEntry, RollbackLogger, type RollbackOptions }
 export { FileStore } from './file-store.js'
 export { EditSession } from './edit-session.js'
-export type { QuerySnapshot, QuerySurface, WriteOps } from './get/base.js'
-export { EntityQuery } from './get/base.js'
+export type {
+  BatchWrite,
+  ResultFacade,
+  EditableResultFacade,
+  Beatmaps,
+  Sets,
+  Scores,
+  Collections,
+  Rulesets,
+  RulesetSettings,
+  Skins,
+  Files,
+  Keybindings,
+  ModPresets,
+  Metadata,
+  BeatmapPatch,
+  BeatmapSetPatch,
+  CollectionPatch,
+  ScorePatch,
+  SkinPatch,
+  FilePatch,
+  KeyBindingPatch,
+  ModPresetPatch,
+  RulesetPatch,
+} from './get/facades.js'
 export type { Crud } from './write/util.js'
-export { BeatmapQuery } from './get/beatmaps.get.js'
-export { ScoreQuery } from './get/scores.get.js'
-export { SetQuery } from './get/sets.get.js'
-export { CollectionQuery } from './get/collections.get.js'
-export { RulesetQuery } from './get/rulesets.get.js'
-export { RulesetSettingQuery } from './get/rulesetsettings.get.js'
-export { SkinQuery } from './get/skins.get.js'
-export { FileQuery } from './get/files.get.js'
-export { KeyBindingQuery } from './get/keybindings.get.js'
-export { ModPresetQuery } from './get/modpresets.get.js'
-export { MetadataQuery } from './get/metadata.get.js'
 export type { FileCleanupReport } from './files.js'
 export { RealmSession, RealmClosedError, RealmReadOnlyError } from './realm-session.js'
 export { CURRENT_SCHEMA_VERSION, MIN_SCHEMA_VERSION } from './schema/version.js'
@@ -110,7 +122,30 @@ export type { BeatmapSetData, BeatmapSetFile } from './osz/types.js'
 export { FileRef } from './types.js'
 export { parseOsu } from './beatmap/parse.js'
 export { serializeOsu } from './beatmap/serialize.js'
-export type { DeepMutable, DeepReadonly, FileSnapshot, SkinSnapshot, BeatmapSnapshot, BeatmapSetSnapshot, ScoreSnapshot } from './types/readonly.js'
+export type {
+  DeepMutable,
+  DeepReadonly,
+  FileSnapshot,
+  SkinSnapshot,
+  BeatmapSnapshot,
+  BeatmapSetSnapshot,
+  CollectionSnapshot,
+  KeyBindingSnapshot,
+  ModPresetSnapshot,
+  RulesetSnapshot,
+  RulesetSettingSnapshot,
+  ScoreSnapshot,
+  BeatmapMetadataSnapshot,
+  BeatmapEdit,
+  BeatmapSetEdit,
+  CollectionEdit,
+  FileEdit,
+  KeyBindingEdit,
+  ModPresetEdit,
+  RulesetEdit,
+  ScoreEdit,
+  SkinEdit,
+} from './types/readonly.js'
 export type { StoryboardLayerName, TriggerName, BlendingMode } from './beatmap/storyboard/types.js'
 export type {
   OsuBeatmap, OsuGeneral, OsuEditor, OsuMetadata, OsuDifficulty,
@@ -132,8 +167,8 @@ export {
 } from './beatmap/storyboard/index.js'
 
 /**
- * The full API object returned by {@link init}.
- * Every sub-module is scoped under its name; query methods are under `.get.`
+ * The API object returned by {@link init}.
+ * Each module lives under its own property. Use `.get` for its results
  * (e.g. `db.scores.get.byDateAfter(someDate)`, `db.beatmaps.get.byId(id)`).
  */
 export type OsuFilesAPI = {
@@ -145,27 +180,27 @@ export type OsuFilesAPI = {
   close(): void
   /** Rollback logger for inspecting and reverting write operations. */
   logger: RollbackLogger
-  /** Beatmap module for querying, creating, updating, and deleting beatmaps. */
+  /** Beatmap module. Use `.get` for results and `.write` to change entities. */
   beatmaps: BeatmapModule
-  /** Score module for querying, creating, updating, and deleting scores. */
+  /** Score module. Use `.get` for results and `.write` to change entities. */
   scores: ScoreModule
-  /** Beatmap set module for querying, creating, updating, deleting, and importing sets. */
+  /** Beatmap-set module. Use `.get` for results and the module methods to import or export sets. */
   sets: BeatmapSetModule
-  /** Beatmap collection module for querying and writing collections. */
+  /** Collection module. Use `.get` for results and the module methods to change membership. */
   collections: BeatmapCollectionModule
-  /** Ruleset module for querying rulesets (osu!, taiko, fruits, mania). */
+  /** Ruleset module. Use `.get` to read rulesets. */
   rulesets: RulesetModule
-  /** Ruleset setting module for querying ruleset settings. */
+  /** Ruleset-settings module. Use `.get` to read settings. */
   rulesetSettings: RulesetSettingModule
-  /** Skin module for querying, writing, importing, exporting, and managing skins. */
+  /** Skin module. Use `.get` for results and the module methods to manage skin files. */
   skins: SkinModule
-  /** File module for querying files and cleaning up orphans. */
+  /** File module. Use `.get` for results and `.write` for file records. */
   files: FileModule
-  /** Key binding module for querying and writing key bindings. */
+  /** Key-binding module. Use `.get` for results and `.write` for changes. */
   keybindings: KeyBindingModule
-  /** Mod preset module for querying and writing mod presets. */
+  /** Mod-preset module. Use `.get` for results and `.write` for changes. */
   modpresets: ModPresetModule
-  /** Beatmap metadata module for querying and writing metadata. */
+  /** Beatmap-metadata module. Use `.get` to read metadata. */
   metadata: BeatmapMetadataModule
   /** Safe integrity diagnostics and explicit conservative repair. */
   integrity: IntegrityModule
@@ -244,7 +279,15 @@ export type OsuFilesAPI = {
 /**
  * Options for {@link init}.
  * @example
- * init('client.realm', { readOnly: true, filesFolderPath: './files' })
+ * import init from 'osu-files'
+ * import type { InitOptions } from 'osu-files'
+ *
+ * const options = {
+ *   readOnly: true,
+ *   filesFolderPath: './files',
+ * } satisfies InitOptions
+ *
+ * return init('client.realm', options)
  */
 export type InitOptions = {
   /** @default CURRENT_SCHEMA_VERSION */
@@ -257,7 +300,7 @@ export type InitOptions = {
   filesFolderPath?: string
   /** Every write checks if hash is present in the files folder. */
   checkHash?: boolean
-  /** Cache query results in memory across repeated accesses on the same query object. @default true */
+  /** @internal Controls the cache used by result lookups. @default true */
   queryCache?: boolean
   /** Limits for untrusted archive input. */
   archiveLimits?: ArchiveLimits
@@ -368,27 +411,27 @@ export function init(path: string, options?: InitOptions): OsuFilesAPI {
     /** Rollback logger for inspecting and reverting write operations. */
     logger,
 
-    /** Beatmap module for querying, creating, updating, and deleting beatmaps. */
+    /** Beatmap module with read-only results. */
     beatmaps,
-    /** Score module for querying, creating, updating, and deleting scores. */
+    /** Score module with read-only results. */
     scores,
-    /** Beatmap set module for querying, creating, updating, deleting, and importing sets. */
+    /** Beatmap-set module with read-only results. */
     sets,
-    /** Beatmap collection module for querying and writing collections. */
+    /** Collection module with read-only results. */
     collections: createCollectionModule(ctx),
-    /** Ruleset module for querying rulesets (osu!, taiko, fruits, mania). */
+    /** Ruleset module with read-only results. */
     rulesets,
-    /** Ruleset setting module for querying ruleset settings. */
+    /** Ruleset-settings module with read-only results. */
     rulesetSettings,
-    /** Skin module for querying, writing, importing, exporting, and managing skins. */
+    /** Skin module with read-only results. */
     skins,
-    /** File module for querying files and cleaning up orphans. */
+    /** File module with read-only results. */
     files,
-    /** Key binding module for querying and writing key bindings. */
+    /** Key-binding module with read-only results. */
     keybindings: createKeyBindingModule(ctx),
-    /** Mod preset module for querying and writing mod presets. */
+    /** Mod-preset module with read-only results. */
     modpresets: createModPresetModule(ctx),
-    /** Beatmap metadata module for querying and writing metadata. */
+    /** Beatmap-metadata module with read-only results. */
     metadata,
     integrity,
 

@@ -126,4 +126,5 @@ function childLabelKind(): 'property' | 'index' {
 .json-node__value--string { color: var(--vp-c-green-1, #40a02b); }
 .json-node__value--number { color: var(--vp-c-orange-1, #fe640b); }
 .json-node__value--boolean, .json-node__value--null { color: var(--vp-c-purple-1, #8839ef); }
+[class^="json-node__value--"] {overflow-wrap: break-word}
 </style>

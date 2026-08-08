@@ -5,6 +5,7 @@ import type { BeatmapSetData } from '../osz/types.js'
 import type { BeatmapSet, Beatmap, Ruleset, RealmFile, Score, BeatmapCollection, BeatmapMetadata } from '../schema/types.js'
 import { assertWritable, markChanged, writeRealm } from '../context.js'
 import { MODE_TO_SHORTNAME, RULESETS } from '../ruleset-info.js'
+import { SetQuery } from '../get/sets.get.js'
 
 function resolveRulesetByMode(rulesets: Map<string, Ruleset>, mode: number): Ruleset | undefined {
   const shortName = MODE_TO_SHORTNAME[mode]
@@ -49,8 +50,8 @@ export function importSet(ctx: OsuFilesContext, input: ImportSetInput): BeatmapS
   const { onlineID, setHash, status, protected: isProtected, files, beatmaps } = input
 
   let existingSet: BeatmapSet | null = null
-  if (onlineID > 0) existingSet = ctx.sets.get.live().byOnlineIdExact(onlineID)[0] as unknown as BeatmapSet | null
-  if (!existingSet && setHash) existingSet = ctx.sets.get.live().byHashEquals(setHash)[0] as unknown as BeatmapSet | null
+  if (onlineID > 0) existingSet = (ctx.sets.get as unknown as SetQuery).live().byOnlineId(onlineID)[0] as unknown as BeatmapSet | null
+  if (!existingSet && setHash) existingSet = (ctx.sets.get as unknown as SetQuery).live().byHash(setHash)[0] as unknown as BeatmapSet | null
 
   const setUUID = existingSet ? existingSet.ID : new Realm.BSON.UUID()
   const previousBeatmaps = existingSet

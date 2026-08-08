@@ -27,12 +27,12 @@ export class BeatmapQuery extends EntityQuery<Beatmap> {
   byLengthBelow(v: number)                    { return this._num('Length', '<=', v) }
   /** @example db.beatmaps.get.byLengthBetween(60000, 180000) */
   byLengthBetween(lo: number, hi: number)     { return this._numBetween('Length', lo, hi) }
-  /** @example db.beatmaps.get.byBeatDivisorExact(4) */
-  byBeatDivisorExact(v: number)               { return this._num('BeatDivisor', '==', v) }
-  /** @example db.beatmaps.get.byOnlineIdExact(506483) */
-  byOnlineIdExact(v: number)                  { return this._num('OnlineID', '==', v) }
-  /** @example db.beatmaps.get.byStatusExact(1) */
-  byStatusExact(v: number)                    { return this._num('Status', '==', v) }
+  /** @example db.beatmaps.get.byBeatDivisor(4) */
+  byBeatDivisor(v: number)                    { return this._num('BeatDivisor', '==', v) }
+  /** @example db.beatmaps.get.byOnlineId(506483) */
+  byOnlineId(v: number)                       { return this._num('OnlineID', '==', v) }
+  /** @example db.beatmaps.get.byStatus(1) */
+  byStatus(v: number)                         { return this._num('Status', '==', v) }
   /** @example db.beatmaps.get.byTotalObjectCountAbove(500) */
   byTotalObjectCountAbove(v: number)          { return this._num('TotalObjectCount', '>=', v) }
   /** @example db.beatmaps.get.byTotalObjectCountBelow(1000) */
@@ -42,14 +42,14 @@ export class BeatmapQuery extends EntityQuery<Beatmap> {
   /** @example db.beatmaps.get.byEndTimeObjectCountBelow(50) */
   byEndTimeObjectCountBelow(v: number)        { return this._num('EndTimeObjectCount', '<=', v) }
 
-  /** @example db.beatmaps.get.byDifficultyNameEquals('Insane') */
-  byDifficultyNameEquals(v: string)           { return this._str('DifficultyName', '==', v) }
+  /** @example db.beatmaps.get.byDifficultyName('Insane') */
+  byDifficultyName(v: string)                 { return this._str('DifficultyName', '==', v) }
   /** @example db.beatmaps.get.byDifficultyNameContains('Hard') */
   byDifficultyNameContains(v: string)         { return this._str('DifficultyName', 'CONTAINS[c]', v) }
-  /** @example db.beatmaps.get.byHashEquals(hash)[0] */
-  byHashEquals(v: string)                     { return this._str('Hash', '==', v) }
-  /** @example db.beatmaps.get.byMd5Equals(md5)[0] */
-  byMd5Equals(v: string)                      { return this._str('MD5Hash', '==', v) }
+  /** @example db.beatmaps.get.byHash(hash)[0] */
+  byHash(v: string)                           { return this._str('Hash', '==', v) }
+  /** @example db.beatmaps.get.byMd5(md5)[0] */
+  byMd5(v: string)                            { return this._str('MD5Hash', '==', v) }
 
   /** @example db.beatmaps.get.byHidden(true) */
   byHidden(v: boolean)                        { return this._bool('Hidden', v) }
@@ -67,24 +67,22 @@ export class BeatmapQuery extends EntityQuery<Beatmap> {
   /** @example db.beatmaps.get.byLastOnlineUpdateAfter(someDate) */
   byLastOnlineUpdateAfter(v: Date)            { return this._date('LastOnlineUpdate', '>', v) }
 
-  /** @example db.beatmaps.get.byMetadataId(uuid)[0] */
-  byMetadataId(v: string | Realm.BSON.UUID)   { return this._fkEq('Metadata.ID', this._uuid(v)) }
   /** @example db.beatmaps.get.bySetId(uuid)[0] */
   bySetId(v: string | Realm.BSON.UUID)        { return this._fkEq('BeatmapSet.ID', this._uuid(v)) }
-  /** @example db.beatmaps.get.bySetOnlineIdExact(506483) */
-  bySetOnlineIdExact(v: number)               { return this._fkEq('BeatmapSet.OnlineID', v) }
-  /** @example db.beatmaps.get.byRulesetShortNameEquals('osu') */
-  byRulesetShortNameEquals(v: RulesetShortName){ return this._fkEq('Ruleset.ShortName', v) }
-  /** @example db.beatmaps.get.byMetadataTitleEquals('Make A Move') */
-  byMetadataTitleEquals(v: string)            { return this._str('Metadata.Title', '==', v) }
-  /** @example db.beatmaps.get.byMetadataTitleContains('Move') */
-  byMetadataTitleContains(v: string)          { return this._str('Metadata.Title', 'CONTAINS[c]', v) }
-  /** @example db.beatmaps.get.byMetadataArtistEquals('Icon For Hire') */
-  byMetadataArtistEquals(v: string)           { return this._str('Metadata.Artist', '==', v) }
-  /** @example db.beatmaps.get.byMetadataArtistContains('Hire') */
-  byMetadataArtistContains(v: string)         { return this._str('Metadata.Artist', 'CONTAINS[c]', v) }
-  /** @example db.beatmaps.get.byMetadataAuthorContains('wajinshu') */
-  byMetadataAuthorContains(v: string)         { return this._str('Metadata.Author.Username', 'CONTAINS[c]', v) }
-  /** @example db.beatmaps.get.byMetadataAuthorOnlineIdExact(124493) */
-  byMetadataAuthorOnlineIdExact(v: number)    { return this._fkEq('Metadata.Author.OnlineID', v) }
+  /** @example db.beatmaps.get.bySetOnlineId(506483) */
+  bySetOnlineId(v: number)                    { return this._fkEq('BeatmapSet.OnlineID', v) }
+  /** @example db.beatmaps.get.byRuleset('osu') */
+  byRuleset(v: RulesetShortName)              { return this._fkEq('Ruleset.ShortName', v) }
+  /** @example db.beatmaps.get.byTitle('Make A Move') */
+  byTitle(v: string)                          { return this._str('Metadata.Title', '==', v) }
+  /** @example db.beatmaps.get.byTitleContains('Move') */
+  byTitleContains(v: string)                  { return this._str('Metadata.Title', 'CONTAINS[c]', v) }
+  /** @example db.beatmaps.get.byArtist('Icon For Hire') */
+  byArtist(v: string)                         { return this._str('Metadata.Artist', '==', v) }
+  /** @example db.beatmaps.get.byArtistContains('Hire') */
+  byArtistContains(v: string)                 { return this._str('Metadata.Artist', 'CONTAINS[c]', v) }
+  /** @example db.beatmaps.get.byAuthorContains('wajinshu') */
+  byAuthorContains(v: string)                 { return this._str('Metadata.Author.Username', 'CONTAINS[c]', v) }
+  /** @example db.beatmaps.get.byAuthorOnlineId(124493) */
+  byAuthorOnlineId(v: number)                 { return this._fkEq('Metadata.Author.OnlineID', v) }
 }

@@ -4,7 +4,7 @@ import type { BeatmapSet } from './schema/types.js'
 import { FileRef } from './types.js'
 import type { OsuFilesContext } from './context.js'
 import { SetQuery } from './get/sets.get.js'
-import type { QuerySurface } from './get/base.js'
+import type { Sets } from './get/facades.js'
 import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { importSet as importSetFn, type ImportSetInput } from './write/set-import.js'
@@ -47,9 +47,9 @@ function rollbackState(set: BeatmapSet): Record<string, unknown> {
 }
 
 /**
- * Creates the beatmap set sub-module with query, write, import, and delete operations.
+ * Creates the beatmap-set module with read-only results, write, import, and delete operations.
  * @example
- * const set = db.sets.get.byOnlineIdExact(506483)[0]
+ * const set = db.sets.get.byOnlineId(506483)[0]
  */
 export function createBeatmapSetModule(ctx: OsuFilesContext) {
   const raw = new SetQuery(ctx.realm)
@@ -57,7 +57,7 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
   const get = raw.proxify()
   const write = createCrud<BeatmapSet>(ctx, getConfig('BeatmapSet')!)
   return {
-    get,
+    get: get as unknown as Sets,
     write,
     /**
      * Opens a beatmap set for safe copy-on-write file editing.
@@ -194,11 +194,11 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
   }
 }
 
-/** Beatmap set sub-module with query, write, import, and delete operations. */
+/** Beatmap-set module with read-only results, write, import, and delete operations. */
 export type BeatmapSetUpdatePatch = Partial<Omit<BeatmapSet, 'ID' | 'Hash' | 'Files'>>
 export interface BeatmapSetModule {
-  /** Queries readonly beatmap-set snapshots. */
-  readonly get: QuerySurface<BeatmapSet, SetQuery>
+  /** Returns read-only beatmap-set snapshots through `get`. */
+  readonly get: Sets
   /** Creates, updates, deletes, or upserts beatmap sets. */
   readonly write: Crud<BeatmapSet>
   /** Opens one beatmap-set editor. */

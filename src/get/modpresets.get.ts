@@ -9,8 +9,8 @@ export class ModPresetQuery extends EntityQuery<ModPreset> {
   /** @example db.modpresets.get.byId(uuid)[0] */
   byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
 
-  /** @example db.modpresets.get.byNameEquals('HD') */
-  byNameEquals(v: string)                { return this._str('Name', '==', v) }
+  /** @example db.modpresets.get.byName('HD') */
+  byName(v: string)                      { return this._str('Name', '==', v) }
   /** @example db.modpresets.get.byNameContains('DT') */
   byNameContains(v: string)              { return this._str('Name', 'CONTAINS[c]', v) }
   /** @example db.modpresets.get.byDescriptionContains('hidden') */
@@ -21,6 +21,6 @@ export class ModPresetQuery extends EntityQuery<ModPreset> {
   /** @example db.modpresets.get.byDeletePending(true) */
   byDeletePending(v: boolean)            { return this._bool('DeletePending', v) }
 
-  /** @example db.modpresets.get.byRulesetShortNameEquals('osu') */
-  byRulesetShortNameEquals(v: RulesetShortName)     { return this._fkEq('Ruleset.ShortName', v) }
+  /** @example db.modpresets.get.byRuleset('osu') */
+  byRuleset(v: RulesetShortName)                   { return this._fkEq('Ruleset.ShortName', v) }
 }

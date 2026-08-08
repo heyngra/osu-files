@@ -1,8 +1,9 @@
 import * as api from '../pure-api.js'
 import { serializeOutput } from './output.js'
 import { transformExample } from './import-transformer.js'
+import { createFixtureDatabase } from './fixture-db.js'
 
-type RunMessage = { source: string; fixtureUrl: string }
+type RunMessage = { source: string; fixtureUrl: string; execution: 'interactive' | 'interactive-with-limitation' | 'interactive-fixture' }
 let active = 0
 
 self.onmessage = async (event: MessageEvent<RunMessage>) => {
@@ -17,6 +18,7 @@ self.onmessage = async (event: MessageEvent<RunMessage>) => {
     const transformed = transformExample(event.data.source)
     const bindings: Record<string, unknown> = {}
     for (const name of transformed.names) bindings[name] = name === 'fixture' ? fixture : (api as Record<string, unknown>)[name]
+    if (event.data.execution === 'interactive-fixture') bindings.db = createFixtureDatabase(fixture.database)
     for (const [name, value] of Object.entries(fixture as Record<string, unknown>)) if (!(name in bindings)) bindings[name] = value
     const names = Object.keys(bindings)
     const values = names.map(name => bindings[name])

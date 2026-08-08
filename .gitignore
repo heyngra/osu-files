@@ -6,7 +6,9 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/.generated/
 docs/api/_generated-sidebar.json
+docs/api/catalog.md
 docs/api/generated/
+docs/api/facades/
 docs/public/fixtures/
 test-results/
 default.realm.management/

@@ -1,6 +1,7 @@
 import { Easing, CommandType, type Vec2, type Colour4, type BlendingMode } from './types.js'
 import type { Storyboard } from './storyboard.js'
 
+/** Base value and timing data shared by concrete storyboard commands. */
 export abstract class StoryboardCommand<T> {
   easing: Easing
   startTime: number
@@ -19,33 +20,43 @@ export abstract class StoryboardCommand<T> {
   abstract get commandType(): CommandType
 }
 
+/** Changes sprite opacity over time. */
 export class StoryboardAlphaCommand extends StoryboardCommand<number> {
   get commandType(): CommandType { return CommandType.Fade }
 }
+/** Moves a sprite horizontally over time. */
 export class StoryboardXCommand extends StoryboardCommand<number> {
   get commandType(): CommandType { return CommandType.MoveX }
 }
+/** Moves a sprite vertically over time. */
 export class StoryboardYCommand extends StoryboardCommand<number> {
   get commandType(): CommandType { return CommandType.MoveY }
 }
+/** Changes uniform sprite scale over time. */
 export class StoryboardScaleCommand extends StoryboardCommand<number> {
   get commandType(): CommandType { return CommandType.Scale }
 }
+/** Changes horizontal and vertical scale independently. */
 export class StoryboardVectorScaleCommand extends StoryboardCommand<Vec2> {
   get commandType(): CommandType { return CommandType.VectorScale }
 }
+/** Rotates a sprite in degrees over time. */
 export class StoryboardRotationCommand extends StoryboardCommand<number> {
   get commandType(): CommandType { return CommandType.Rotation }
 }
+/** Changes sprite colour over time. */
 export class StoryboardColourCommand extends StoryboardCommand<Colour4> {
   get commandType(): CommandType { return CommandType.Colour }
 }
+/** Flips a sprite horizontally. */
 export class StoryboardFlipHCommand extends StoryboardCommand<boolean> {
   get commandType(): CommandType { return CommandType.FlipH }
 }
+/** Flips a sprite vertically. */
 export class StoryboardFlipVCommand extends StoryboardCommand<boolean> {
   get commandType(): CommandType { return CommandType.FlipV }
 }
+/** Changes the sprite blending mode. */
 export class StoryboardBlendingCommand extends StoryboardCommand<BlendingMode> {
   get commandType(): CommandType { return CommandType.Blending }
 }
@@ -56,9 +67,11 @@ type ColourValues = { easing?: Easing; startTime?: number; endTime?: number; sta
 type BoolValues = { easing?: Easing; startTime?: number; endTime?: number; startValue?: boolean; endValue?: boolean }
 type BlendingValues = { easing?: Easing; startTime?: number; endTime?: number; startValue?: BlendingMode; endValue?: BlendingMode }
 
+/** Stores and edits the commands attached to one storyboard element or group. */
 export class StoryboardCommandGroup {
   private __sb?: Storyboard
 
+  /** @internal */
   get _sb(): Storyboard | undefined { return this.__sb }
   set _sb(sb: Storyboard | undefined) { this.__sb = sb }
 
@@ -228,6 +241,7 @@ export class StoryboardCommandGroup {
   }
 }
 
+/** Repeats its commands a fixed number of times from a start time. */
 export class StoryboardLoopingGroup extends StoryboardCommandGroup {
   loopStartTime: number
   totalIterations: number
@@ -239,6 +253,7 @@ export class StoryboardLoopingGroup extends StoryboardCommandGroup {
   }
 }
 
+/** Runs commands only during a named gameplay trigger. */
 export class StoryboardTriggerGroup extends StoryboardCommandGroup {
   triggerName: string
   triggerStartTime: number

@@ -17,10 +17,16 @@ import type { StoryboardElementSource } from './storyboard/types.js'
 import { md5, sha256, fileStoragePath, normalizeFilename } from '../util.js'
 import { assertWritable } from '../context.js'
 import { getRealmFile } from '../files.js'
+import { BeatmapQuery } from '../get/beatmaps.get.js'
+import { SetQuery } from '../get/sets.get.js'
 
 /** Creates a validated file reference from a hash or in-memory content.
  * @example
- * const ref = createFileRef('audio.mp3', { content: buffer })
+ * import { createFileRef } from 'osu-files'
+ *
+ * const ref = createFileRef('audio.mp3', { hash: 'a'.repeat(64) })
+ *
+ * return { filename: ref.filename, hash: ref.hash }
  */
 export function createFileRef(
   filename: string,
@@ -67,7 +73,7 @@ function mergeOsbContent(target: Storyboard, source: Storyboard, sourceType: Sto
 export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string): OsuBeatmap | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0] as unknown as Beatmap | undefined
+  const beatmap = (ctx.beatmaps.get as unknown as BeatmapQuery).live().byId(beatmapId)[0] as unknown as Beatmap | undefined
   if (!beatmap) return undefined
 
   const hash = beatmap.Hash ?? ''
@@ -123,7 +129,7 @@ export function realmBeatmapToOsuBeatmap(ctx: OsuFilesContext, beatmapId: string
 export function realmSetToBeatmapSetData(ctx: OsuFilesContext, setId: string): BeatmapSetData | undefined {
   if (!ctx.filesFolderPath) return undefined
 
-  const set = ctx.sets.get.live().byId(setId)[0]
+  const set = (ctx.sets.get as unknown as SetQuery).live().byId(setId)[0]
   if (!set) return undefined
 
   const files: BeatmapSetFile[] = []
@@ -226,7 +232,7 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
   assertWritable(ctx)
 
   const beatmapId = new Realm.BSON.UUID(beatmapIdStr)
-  const beatmap = ctx.beatmaps.get.live().byId(beatmapId)[0] as unknown as Beatmap | undefined
+  const beatmap = (ctx.beatmaps.get as unknown as BeatmapQuery).live().byId(beatmapId)[0] as unknown as Beatmap | undefined
   if (!beatmap) throw new Error(`Beatmap '${beatmapIdStr}' not found`)
 
   // Validate every file ref in the storyboard
@@ -297,11 +303,11 @@ function saveOsuBeatmapInternal(ctx: OsuFilesContext, beatmapIdStr: string, modi
     }
   })
 
-  const freshBeatmap = ctx.beatmaps.get.live().byId(beatmapId)[0]
+  const freshBeatmap = (ctx.beatmaps.get as unknown as BeatmapQuery).live().byId(beatmapId)[0]
   if (freshBeatmap?.BeatmapSet) {
     const setObj = freshBeatmap.BeatmapSet
     const setPk = setObj.ID instanceof Realm.BSON.UUID ? setObj.ID : new Realm.BSON.UUID(String(setObj.ID))
-  const setCopy = ctx.sets.get.live().byId(setPk)[0] as unknown as BeatmapSet | undefined
+  const setCopy = (ctx.sets.get as unknown as SetQuery).live().byId(setPk)[0] as unknown as BeatmapSet | undefined
     if (setCopy) {
       const setFiles = setCopy.Files
 

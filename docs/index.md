@@ -1,6 +1,12 @@
 <script setup>
 import ApiCard from './.vitepress/components/ApiCard.vue'
-import ExampleRunner from './.vitepress/components/ExampleRunner.vue'
+import PromotableExample from './.vitepress/components/PromotableExample.vue'
+
+const homeExample = `import { parseOsu } from 'osu-files'
+
+const metadata = parseOsu(beatmaps[0].osuText).metadata
+
+return metadata`
 </script>
 
 # osu-files
@@ -20,7 +26,7 @@ const db = init('./client.realm', {
   filesFolderPath: './files',
 })
 
-const maps = db.beatmaps.get.byOnlineIdExact(506483)
+const maps = db.beatmaps.get.byOnlineId(506483).map(map => map.Metadata?.Title)
 db.close()
 ```
 
@@ -39,7 +45,15 @@ See [Installation](/guide/installation) for setup.
 
 This documentation features a live editor so you can preview the code on your own. Try it out!
 
-<ExampleRunner id="home-parse-beatmap-metadata" title="Parse beatmap metadata" execution="interactive" fixture="realm-docs" :code="`import { parseOsu } from 'osu-files'\n\nconst metadata = parseOsu(beatmaps[0].osuText).metadata\n\nreturn metadata`" />
+<PromotableExample id="home-parse-beatmap-metadata" title="Parse beatmap metadata" execution="interactive" fixture="realm-docs" :code="homeExample">
+```ts
+import { parseOsu } from 'osu-files'
+
+const metadata = parseOsu(beatmaps[0].osuText).metadata
+
+return metadata
+```
+</PromotableExample>
 
 <style>
 .api-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1.5rem 0 2.5rem; }

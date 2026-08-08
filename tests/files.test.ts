@@ -20,7 +20,7 @@ describe('File cleanup', () => {
       const report = osu.files.cleanupOrphanedFiles()
       assert.strictEqual(report.removed, 1)
       assert.strictEqual(report.failed.length, 0)
-      assert.strictEqual(osu.files.get.byHashEquals(hash).length, 0)
+    assert.strictEqual(osu.files.get.byHash(hash).length, 0)
       assert.strictEqual(osu.files.verify(hash), false)
     } finally {
       osu.close()
@@ -43,7 +43,7 @@ describe('File cleanup', () => {
 
       const report = osu.files.cleanupOrphanedFiles()
       assert.strictEqual(report.failed.length, 1)
-      assert.strictEqual(osu.files.get.byHashEquals(hash).length, 1)
+    assert.strictEqual(osu.files.get.byHash(hash).length, 1)
 
       ;(store as unknown as { remove: (value: string) => boolean }).remove = remove
     } finally {

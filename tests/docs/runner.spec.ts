@@ -1,17 +1,36 @@
 import { test, expect } from '@playwright/test'
 
-test('interactive examples start as blurred previews and load on demand', async ({ page }) => {
+test('interactive examples start as readable previews and load on demand', async ({ page }) => {
   const workerRequests: string[] = []
   page.on('request', request => { if (request.url().includes('worker')) workerRequests.push(request.url()) })
   await page.goto('/')
-  const example = page.locator('.api-example').first()
-  await expect(example.getByRole('button', { name: 'Load' })).toBeVisible()
-  await expect(example.locator('.api-example__preview')).toBeVisible()
-  await expect(example.locator('.monaco-editor')).toHaveCount(0)
+  const preview = page.locator('.promotable-example').first()
+  await expect(preview.locator('.promotable-example__activate')).toBeVisible()
+  await expect(preview.locator('.language-ts.vp-adaptive-theme')).toBeVisible()
+  await expect(preview.locator('.language-ts.vp-adaptive-theme .lang')).toHaveText('ts')
+  await expect(preview.locator('.language-ts.vp-adaptive-theme .vp-code')).toBeVisible()
+  await expect(preview.locator('.language-ts.vp-adaptive-theme .vp-code .line')).not.toHaveCount(0)
+  await expect(preview.locator('.language-ts.vp-adaptive-theme .vp-code span[style*="--shiki-"]')).not.toHaveCount(0)
+  await expect(preview.locator('.api-example__preview')).toHaveCount(0)
+  await expect(preview.locator('.api-example__bar')).toHaveCount(0)
+  const activate = preview.locator('.promotable-example__activate')
+  const copy = preview.locator('.language-ts.vp-adaptive-theme > .copy')
+  await expect(activate).toHaveCSS('opacity', '0')
+  await expect(copy).toHaveCSS('opacity', '0')
+  await preview.locator('.language-ts.vp-adaptive-theme pre').hover()
+  await expect(activate).toHaveCSS('opacity', '1')
+  await expect(copy).toHaveCSS('opacity', '1')
+  await page.locator('h1').first().hover()
+  await expect(activate).toHaveCSS('opacity', '0')
+  await expect(copy).toHaveCSS('opacity', '0')
+  await expect(page.locator('.api-example')).toHaveCount(0)
+  await expect(page.locator('.monaco-editor')).toHaveCount(0)
   expect(workerRequests.some(url => url.includes('ts.worker'))).toBe(false)
 
-  await example.getByRole('button', { name: 'Load' }).click()
+  await activate.click()
+  const example = page.locator('.api-example').first()
   await expect(example.locator('.monaco-editor')).toBeVisible({ timeout: 20_000 })
+  await expect(example.locator('.api-example__run')).toBeEnabled()
   await expect(example.locator('.monaco-editor .view-lines')).toContainText("from 'osu-files'")
   await expect(example.locator('.monaco-editor .view-lines')).not.toContainText('@docs/fixture')
   await expect(example.locator('.monaco-editor .view-lines')).not.toContainText('export default function run')
@@ -20,8 +39,9 @@ test('interactive examples start as blurred previews and load on demand', async 
 
 test('loaded examples execute and reset', async ({ page }) => {
   await page.goto('/')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
   const example = page.locator('.api-example').first()
-  await example.getByRole('button', { name: 'Load' }).click()
   const editor = example.locator('.monaco-editor')
   await expect(editor).toBeVisible({ timeout: 20_000 })
   await editor.click()
@@ -36,8 +56,9 @@ test('loaded examples execute and reset', async ({ page }) => {
 
 test('returned JSON renders as a collapsible tree', async ({ page }) => {
   await page.goto('/')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
   const example = page.locator('.api-example').first()
-  await example.getByRole('button', { name: 'Load' }).click()
   const editor = example.locator('.monaco-editor')
   await expect(editor).toBeVisible({ timeout: 20_000 })
   await editor.click()
@@ -63,8 +84,9 @@ test('returned JSON renders as a collapsible tree', async ({ page }) => {
 
 test('non-JSON output keeps the plain-text fallback', async ({ page }) => {
   await page.goto('/')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
   const example = page.locator('.api-example').first()
-  await example.getByRole('button', { name: 'Load' }).click()
   const editor = example.locator('.monaco-editor')
   await expect(editor).toBeVisible({ timeout: 20_000 })
   await editor.click()
@@ -79,23 +101,30 @@ test('non-JSON output keeps the plain-text fallback', async ({ page }) => {
 
 test('loaded editor and edits persist for the current tab session', async ({ page }) => {
   await page.goto('/')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
   const example = page.locator('.api-example').first()
-  await example.getByRole('button', { name: 'Load' }).click()
   const editor = example.locator('.monaco-editor')
   await expect(editor).toBeVisible({ timeout: 20_000 })
   await editor.click()
   await page.keyboard.press('Control+End')
   await page.keyboard.type('\nconst sessionEdit = true')
   await page.reload()
-  const restored = page.locator('.api-example').first().locator('.monaco-editor')
+  const restoredPreview = page.locator('.promotable-example').first()
+  await expect(restoredPreview.locator('.language-ts.vp-adaptive-theme')).toBeVisible()
+  await expect(page.locator('.api-example')).toHaveCount(0)
+  await restoredPreview.locator('.promotable-example__activate').click()
+  const restoredExample = page.locator('.api-example').first()
+  const restored = restoredExample.locator('.monaco-editor')
   await expect(restored).toBeVisible({ timeout: 20_000 })
   await expect(restored.locator('.view-lines')).toContainText('sessionEdit')
 })
 
 test('Monaco reports TypeScript and docs lint errors after loading', async ({ page }) => {
   await page.goto('/')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
   const example = page.locator('.api-example').first()
-  await example.getByRole('button', { name: 'Load' }).click()
   const editor = example.locator('.monaco-editor')
   await expect(editor).toBeVisible({ timeout: 20_000 })
   await editor.click()
@@ -108,8 +137,9 @@ test('Monaco reports TypeScript and docs lint errors after loading', async ({ pa
 
 test('Monaco provides library completions after loading', async ({ page }) => {
   await page.goto('/')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
   const example = page.locator('.api-example').first()
-  await example.getByRole('button', { name: 'Load' }).click()
   const editor = example.locator('.monaco-editor')
   await expect(editor).toBeVisible({ timeout: 20_000 })
   await editor.click()
@@ -118,4 +148,48 @@ test('Monaco provides library completions after loading', async ({ page }) => {
   await page.keyboard.press('Control+Space')
   await expect(page.locator('.suggest-widget')).toContainText('metadata')
   await expect(page.locator('.suggest-widget')).toContainText('hitObjects')
+})
+
+test('fixture facade examples load without TypeScript diagnostics', async ({ page }) => {
+  await page.goto('/api/facades/Beatmaps')
+  const preview = page.locator('.promotable-example').first()
+  await expect(preview.locator('.promotable-example__activate')).toBeVisible()
+  await preview.locator('.promotable-example__activate').click()
+  const example = page.locator('.api-example[data-execution="interactive-fixture"]').first()
+  await expect(example.locator('.monaco-editor')).toBeVisible({ timeout: 20_000 })
+  await expect(example.locator('.api-example__diagnostics')).toContainText('No problems detected.')
+  await expect(example.locator('.api-example__diagnostics [data-error]')).toHaveCount(0)
+})
+
+test('facade edit examples keep independent TypeScript module scopes', async ({ page }) => {
+  await page.goto('/api/facades/Beatmaps')
+
+  for (const id of ['facade-Beatmaps-autoEdit', 'facade-Beatmaps-commit', 'facade-Beatmaps-rollback']) {
+    const example = page.locator(`#${id}`)
+    await example.locator('.promotable-example__activate').click()
+    await expect(example.locator('.monaco-editor')).toBeVisible({ timeout: 20_000 })
+  }
+
+  for (const id of ['facade-Beatmaps-autoEdit', 'facade-Beatmaps-commit', 'facade-Beatmaps-rollback']) {
+    const diagnostics = page.locator(`#${id} .api-example__diagnostics`)
+    await expect(diagnostics).toContainText('No problems detected.')
+    await expect(diagnostics).not.toContainText('Cannot redeclare block-scoped variable')
+  }
+})
+
+test('facade array results stay structured after running', async ({ page }) => {
+  await page.goto('/api/facades/Beatmaps')
+  const preview = page.locator('.promotable-example').first()
+  await preview.locator('.promotable-example__activate').click()
+  const example = page.locator('.api-example[data-execution="interactive-fixture"]').first()
+  await expect(example.locator('.monaco-editor')).toBeVisible({ timeout: 20_000 })
+  const output = example.locator('[data-json-output]')
+  await expect(output.locator('[data-json-node="array"][data-json-depth="0"]')).toBeVisible()
+  await expect(output.locator('[data-json-path="$[0].title"]')).toHaveText('"title":"Make A Move"')
+  await expect(example.getByRole('button', { name: 'Run (Ctrl+Enter)' })).toBeEnabled()
+  await example.getByRole('button', { name: 'Run (Ctrl+Enter)' }).click()
+
+  await expect(output.locator('.output-panel__fallback')).toHaveCount(0)
+  await expect(output.locator('[data-json-node="array"][data-json-depth="0"]')).toBeVisible()
+  await expect(output.locator('[data-json-path="$[0].title"]')).toHaveText('"title":"Make A Move"')
 })

@@ -12,7 +12,7 @@ export class FileRef {
   constructor(
     first: string | RealmFileLike | NamedFileUsageLike,
     second?: string | { hash?: string; content?: Buffer },
-    ctx?: { files: { get: { byHashEquals: (h: string) => ReadonlyArray<RealmFileLike> } } },
+    ctx?: { files: { get: { byHash: (h: string) => ReadonlyArray<RealmFileLike> } } },
   ) {
     if (typeof first === 'object' && 'File' in first) {
       const usage = first as NamedFileUsageLike
@@ -52,7 +52,7 @@ export class FileRef {
       throw new Error(`FileRef '${filename}' has an invalid SHA-256 hash`)
 
     if (!content && ctx) {
-      if (!ctx.files.get.byHashEquals(hash)[0]) {
+      if (!ctx.files.get.byHash(hash)[0]) {
         throw new Error(`File '${filename}' with hash ${hash} not found in realm database`)
       }
     }

@@ -1,3 +1,11 @@
+/** @satisfies {import('../../tools/docs/guide-schema.js').GuideMetadata} */
+const guide = {
+  group: 'collections',
+  title: 'Import a collection database',
+  order: 20,
+  summary: 'Merges a legacy `collections.db` file into the collections already stored in Realm.',
+  api: ['init', 'OsuFilesAPI.collections'],
+}
 import readline from 'node:readline/promises'
 import init from 'osu-files'
 
@@ -16,13 +24,19 @@ const rl = readline.createInterface({
   })
 
   try {
+    /**
+     * @docs
+     * Import the legacy database in one call. Collections with new names are created; matching names receive any beatmap hashes they do not already contain.
+     */
+    /* @docs:start import-collections */
     console.log(`\nImporting ${legacyDbPath}...`)
     const { imported, merged } = initialized.collections.importLegacy(legacyDbPath)
-    const total = initialized.collections.get.length
+    const total = initialized.collections.get.count()
 
     console.log(`  Created:  ${imported} new collections`)
     console.log(`  Merged:   ${merged} existing collections`)
     console.log(`  Total:    ${total} collections in database`)
+    /* @docs:end import-collections */
     console.log('Done.')
   } finally {
     initialized.close()

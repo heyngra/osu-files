@@ -33,7 +33,13 @@ export class FileStore {
 
   /** Stores content after checking or calculating its SHA-256 hash.
    * @example
-   * const { hash } = store.put(content)
+   * import { FileStore } from 'osu-files'
+   *
+   * const store = new FileStore('./files')
+   * const content = Buffer.from('data')
+   * const stored = store.put(content)
+   *
+   * return stored.hash
    */
   put(content: Buffer, expectedHash?: string): { hash: string; created: boolean } {
     this.assertWritable()
@@ -89,7 +95,13 @@ export class FileStore {
    * @returns The stored file contents.
    * @throws If the file is missing, invalid, or fails verification.
    * @example
+   * import { FileStore } from 'osu-files'
+   *
+   * const store = new FileStore('./files', true)
+   * const hash = 'a'.repeat(64)
    * const content = store.read(hash)
+   *
+   * return content.length
    */
   read(hash: string, verify = true): Buffer {
     const path = this.path(hash)
@@ -103,7 +115,12 @@ export class FileStore {
    * @param hash - SHA-256 content address.
    * @returns `true` only when the file exists and matches its address.
    * @example
-   * if (!store.verify(hash)) throw new Error('Corrupt file')
+   * import { FileStore } from 'osu-files'
+   *
+   * const store = new FileStore('./files', true)
+   * const hash = 'a'.repeat(64)
+   *
+   * return store.verify(hash)
    */
   verify(hash: string): boolean {
     try {

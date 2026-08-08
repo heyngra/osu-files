@@ -52,7 +52,14 @@ function parseSplitInts(v: string, sep: string): number[] {
  * Parses .osu file content into a structured OsuBeatmap object.
  * @returns Parsed beatmap object.
  * @example
- * parseOsu(fs.readFileSync('song.osu', 'utf-8'))
+ * import { parseOsu } from 'osu-files'
+ *
+ * const beatmap = parseOsu(source)
+ *
+ * return {
+ *   title: beatmap.metadata.title,
+ *   objects: beatmap.hitObjects.length,
+ * }
  */
 export function parseOsu(content: string): OsuBeatmap {
   const lines = content.split(/\r?\n/)

@@ -44,7 +44,6 @@ html.dark {
 /* Signature / return blockquotes -> mono chips */
 .api-page .vp-doc blockquote {
   border: 1px solid var(--vp-c-divider);
-  border-left: 3px solid var(--vp-c-brand-2);
   border-radius: 8px;
   margin: .6rem 0;
   padding: .55rem .8rem;
@@ -71,6 +70,7 @@ html.dark {
 /* Per-member cards */
 .api-page .api-member {
   display: grid;
+  position: relative;
   grid-template-columns: minmax(6.5rem, 8.5rem) minmax(0, 1fr);
   column-gap: 1rem;
   row-gap: .15rem;
@@ -97,6 +97,23 @@ html.dark {
 }
 .api-page .api-member > h3 + blockquote { grid-column: 2; }
 .api-page .api-member > h3 .header-anchor { display: none; }
+.api-page .api-member > h3.api-outline-member {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  pointer-events: none;
+  scroll-margin-top: calc(var(--vp-nav-height) + 1rem);
+}
+.api-page .api-member > h3.api-outline-member + blockquote { grid-column: 1 / -1; }
 .api-page .api-member > h4 {
   grid-column: 1;
   margin: .25rem 0 0;
@@ -119,6 +136,7 @@ html.dark {
   color: var(--vp-c-text-2);
 }
 .api-page .api-member > h5 + * { grid-column: 2; }
+.api-page .api-member > .promotable-example { grid-column: 1 / -1; width: 100%; }
 .api-page .api-member > blockquote,
 .api-page .api-member > p,
 .api-page .api-member > table,
@@ -141,7 +159,7 @@ html.dark {
 .api-page .api-member > h5 + .language-text { margin-top: .15rem; }
 .api-page .api-member hr { display: none; }
 
-/* Function overload details: keep Parameters and Returns beside each other. */
+/* Function pages: keep Parameters and Returns cards beside each other. */
 .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) fit-content(40%);
@@ -157,56 +175,9 @@ html.dark {
 }
 .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > h3,
 .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > table,
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > p {
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > p,
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > blockquote {
   grid-column: 1;
-}
-
-/* Single-signature functions use plain Parameters / Returns headings. */
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) fit-content(40%);
-  column-gap: 1rem;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > :not(.api-member) {
-  grid-column: 1 / -1;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="parameters"],
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] {
-  grid-column: span 1;
-  order: 1;
-  align-self: start;
-  margin: .45rem 0 .15rem;
-  border: 0;
-  border-radius: 0;
-  padding: .2rem 0;
-  background: transparent;
-  font-size: .72rem;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="parameters"] + *,
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] + * {
-  grid-column: span 1;
-  order: 2;
-  align-self: start;
-  margin: .15rem 0 .8rem;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] ~ * {
-  order: 3;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] + * {
-  order: 2;
-}
-
-/* Object-return members read better as title-over-value cards. */
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="returns"]) > h2[id^="returns"] ~ .api-member {
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="returns"]) > h2[id^="returns"] ~ .api-member > h3,
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="returns"]) > h2[id^="returns"] ~ .api-member > h3 + blockquote {
-  grid-column: 1;
-}
-.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="returns"]) > h2[id^="returns"] ~ .api-member > h3 {
-  align-self: start;
 }
 
 @media (max-width: 640px) {
@@ -219,30 +190,6 @@ html.dark {
   }
   .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member {
     grid-column: 1;
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="parameters"],
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"],
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="parameters"] + *,
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] + * {
-    grid-column: 1;
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="parameters"] {
-    order: 1;
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="parameters"] + * {
-    order: 2;
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] {
-    order: 3;
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] ~ * {
-    order: 5;
-  }
-  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> h2[id^="parameters"]):not(:has(> .api-member)) > h2[id^="returns"] + * {
-    order: 4;
   }
 }
 

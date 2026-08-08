@@ -2,7 +2,7 @@ import Realm from 'realm'
 import type { KeyBinding } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { KeyBindingQuery } from './get/keybindings.get.js'
-import type { QuerySurface } from './get/base.js'
+import type { Keybindings } from './get/facades.js'
 import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { registerDefaults as registerDefaultsImpl, type RegisterWrite } from './keybindings/register.js'
@@ -14,9 +14,9 @@ import {
 import { resolveAction, validateKeyCombo } from './keybindings/keys.js'
 
 /**
- * Creates the key binding sub-module with query and write operations.
+ * Creates the key-binding module with read-only results and write operations.
  * @example
- * const kb = db.keybindings.get.byRulesetNameEquals('osu')[0]
+ * const kb = db.keybindings.get.byRulesetName('osu')[0]
  */
 export function createKeyBindingModule(ctx: OsuFilesContext): KeyBindingModule {
   const q = new KeyBindingQuery(ctx.realm)
@@ -57,7 +57,7 @@ export function createKeyBindingModule(ctx: OsuFilesContext): KeyBindingModule {
   }
 
   return {
-    get,
+    get: get as unknown as Keybindings,
     write,
 
     /**
@@ -105,10 +105,10 @@ export function createKeyBindingModule(ctx: OsuFilesContext): KeyBindingModule {
   }
 }
 
-/** Key binding sub-module with query and write operations. */
+/** Key-binding module with read-only results and write operations. */
 export type KeyBindingModule = {
-  /** Queries readonly key-binding snapshots. */
-  readonly get: QuerySurface<KeyBinding, KeyBindingQuery>
+  /** Returns read-only key-binding snapshots through `get`. */
+  readonly get: Keybindings
   /** Creates, updates, deletes, or upserts key bindings. */
   readonly write: Crud<KeyBinding>
   /** Registers default keybindings for a ruleset. */
