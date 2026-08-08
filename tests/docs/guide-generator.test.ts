@@ -72,4 +72,10 @@ const value = '/* @docs:end fake */'
     assert.match(replays, /<GuideSource source="examples\/export-osr\/index\.js" :start-line="\d+" :end-line="\d+">/)
     assert.equal((replays.match(/<GuideSource source=/g) ?? []).length, (replays.match(/```js/g) ?? []).length)
   })
+
+  it('marks guide previews for contextual Twoslash processing', () => {
+    const pages = renderGuidePages(readGuides(resolve(root, 'examples')), manifest)
+    const replays = pages.get('replays.md')!
+    assert.match(replays, /```js twoslash\n\/\/ @guide-source examples\/import-osr\/index\.js#L35-L44\nconst result = initialized\.osr\.import\(replayPath\)/)
+  })
 })

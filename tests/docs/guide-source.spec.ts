@@ -24,3 +24,14 @@ test('guide previews link to their exact GitHub source lines', async ({ page }) 
   expect(Math.abs(sourceBox!.y - copyBox!.y)).toBeLessThanOrEqual(0.5)
   expect(Math.abs(sourceBox!.height - copyBox!.height)).toBeLessThanOrEqual(0.5)
 })
+
+test('guide previews show TypeScript hover information', async ({ page }) => {
+  await page.goto('/guide/examples/replays')
+  const preview = page.locator('.guide-source').first()
+  const result = preview.locator('.twoslash-hover').filter({ hasText: /^result$/ }).first()
+
+  await expect(preview.locator('code')).not.toContainText('@guide-source')
+  await expect(result).toBeVisible()
+  await result.hover()
+  await expect(page.locator('.v-popper__popper--shown')).toContainText('const result: ParsedReplay')
+})

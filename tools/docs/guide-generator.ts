@@ -229,7 +229,8 @@ function apiLinks(example: GuideExample, manifest: ApiItem[]): string {
 
 function renderBlock(block: GuideBlock, example: GuideExample): string {
   if (block.kind === 'code') {
-    return `<GuideSource source="${example.sourcePath}" :start-line="${block.startLine}" :end-line="${block.endLine}">\n\n\`\`\`${example.language}\n${block.content}\n\`\`\`\n\n</GuideSource>`
+    const marker = `// @guide-source ${example.sourcePath}#L${block.startLine}-L${block.endLine}`
+    return `<GuideSource source="${example.sourcePath}" :start-line="${block.startLine}" :end-line="${block.endLine}">\n\n\`\`\`${example.language} twoslash\n${marker}\n${block.content}\n\`\`\`\n\n</GuideSource>`
   }
   if (block.kind === 'markdown') return block.content
   return `> [!${block.kind === 'note' ? 'NOTE' : 'WARNING'}]\n> ${block.content.replaceAll('\n', '\n> ')}`
