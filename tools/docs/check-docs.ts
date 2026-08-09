@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { facadeNames } from './facades.js'
 
 const root = process.cwd()
 const required = ['docs/index.md', 'docs/public/CNAME', 'docs/api/index.md', 'docs/api/advanced.md', 'docs/api/catalog.md', 'docs/api/_generated-sidebar.json', 'docs/.generated/api-manifest.json', 'docs/.generated/api-examples.json', 'docs/.generated/facade-examples.json', 'docs/.generated/guides.json', 'docs/.vitepress/pure-api.ts']
@@ -7,8 +8,7 @@ for (const file of required) if (!existsSync(resolve(root, file))) throw new Err
 if (readFileSync(resolve(root, 'docs/public/CNAME'), 'utf8').trim() !== 'osu-files.heyn.live') throw new Error('Invalid CNAME')
 const manifest = JSON.parse(readFileSync(resolve(root, 'docs/.generated/api-manifest.json'), 'utf8')) as Array<{ publicSymbol: string; memberPath?: string; kind: string; importPath: string; documentationPage: string; exampleIds: string[] }>
 const apiExamples = JSON.parse(readFileSync(resolve(root, 'docs/.generated/api-examples.json'), 'utf8')) as Array<{ id: string; target: string; execution: string; code: string; output?: string; documentationPage: string; placement: { kind: 'declaration' } | { kind: 'member'; anchor: string } }>
-const facades = ['Beatmaps', 'Sets', 'Scores', 'Collections', 'Rulesets', 'RulesetSettings', 'Skins', 'Files', 'Keybindings', 'ModPresets', 'Metadata']
-for (const facade of facades) if (!existsSync(resolve(root, 'docs/api/facades', `${facade}.md`))) throw new Error(`Missing generated facade page: docs/api/facades/${facade}.md`)
+for (const facade of facadeNames) if (!existsSync(resolve(root, 'docs/api/facades', `${facade}.md`))) throw new Error(`Missing generated facade page: docs/api/facades/${facade}.md`)
 if (manifest.some(item => item.importPath !== 'osu-files')) throw new Error('API manifest contains a non-Node import path')
 if (JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')).exports['./browser']) throw new Error('Public browser export must not exist')
 const examplesById = new Map(apiExamples.map(example => [example.id, example]))

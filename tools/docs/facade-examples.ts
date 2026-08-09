@@ -9,22 +9,7 @@ import {
   type FixtureDatabaseData,
 } from '../../docs/.vitepress/runner/fixture-db.js'
 import { seedRealmFixture } from './facade-realm-fixture.js'
-
-export const facadeDefinitions = [
-  { name: 'Beatmaps', path: 'db.beatmaps.get', sortField: 'BPM', patch: '{ Hidden: true }', noun: 'beatmaps' },
-  { name: 'Sets', path: 'db.sets.get', sortField: 'DateAdded', patch: '{ Status: 1 }', noun: 'beatmap sets' },
-  { name: 'Scores', path: 'db.scores.get', sortField: 'Date', patch: '{ PP: 0 }', noun: 'scores' },
-  { name: 'Collections', path: 'db.collections.get', sortField: 'Name', patch: "{ Name: 'Example' }", noun: 'collections' },
-  { name: 'Rulesets', path: 'db.rulesets.get', sortField: 'Name', patch: '{ Available: true }', noun: 'rulesets' },
-  { name: 'RulesetSettings', path: 'db.rulesetSettings.get', sortField: 'Key', patch: "{ Value: 'Example' }", noun: 'ruleset settings' },
-  { name: 'Skins', path: 'db.skins.get', sortField: 'Name', patch: "{ Name: 'Example' }", noun: 'skins' },
-  { name: 'Files', path: 'db.files.get', sortField: 'Hash', patch: null, noun: 'files' },
-  { name: 'Keybindings', path: 'db.keybindings.get', sortField: 'Action', patch: "{ KeyCombination: 'Z' }", noun: 'keybindings' },
-  { name: 'ModPresets', path: 'db.modpresets.get', sortField: 'Name', patch: "{ Name: 'Example' }", noun: 'mod presets' },
-  { name: 'Metadata', path: 'db.metadata.get', sortField: 'Title', patch: "{ Title: 'Example' }", noun: 'metadata records' },
-] as const
-
-const writableFacades = new Set(['Beatmaps', 'Sets', 'Scores', 'Collections', 'Rulesets', 'Skins', 'Files', 'Keybindings', 'ModPresets'])
+import { facadeDefinitions, writableFacades } from './facades.js'
 
 type Reflection = {
   name: string
