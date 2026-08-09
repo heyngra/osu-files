@@ -34,35 +34,22 @@ import type {
   SkinEdit,
 } from '../types/readonly.js'
 
-/** Batch changes for every item in a result. */
 export type BatchWrite<Patch> = {
-  /** Deletes every matched entity in one transaction. */
   delete(): number
-  /** Applies one typed patch to every matched entity in one transaction. */
   update(patch: Patch): number
 }
 
-/** Array methods and result operations available on every result. */
 export interface ResultFacade<T, Self> extends ReadonlyArray<T> {
-  /** Limits how many values array operations can return. */
   limit(n: number): Self
-  /** Counts matches before applying `limit()`. */
   count(): number
-  /** Returns the first matching snapshot, or `undefined`. */
   first(): T | undefined
-  /** Returns all matching snapshots as a regular array. */
   toArray(): readonly T[]
-  /** Alias for {@link toArray}. */
   all(): readonly T[]
-  /** Sorts results by a Realm field. */
   sortedBy(field: string, ascending?: boolean): Self
 }
 
-/** Write operations available on writable results. */
 export interface EditableResultFacade<T, Self, Patch, Editable = DeepMutable<T>> extends ResultFacade<T, Self> {
-  /** Saves the current edit session, if there is one. */
   commit(): void
-  /** Drops the current edit session's changes, if there is one. */
   rollback(): void
   /**
    * Starts a buffered edit session for the matching values.
@@ -74,7 +61,6 @@ export interface EditableResultFacade<T, Self, Patch, Editable = DeepMutable<T>>
    * // Commits automatically when the scope ends.
    */
   autoEdit(): EditSession<Editable>
-  /** Applies batch operations to the matching values. */
   readonly write: BatchWrite<Patch>
 }
 
