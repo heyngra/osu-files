@@ -2,11 +2,29 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { transformerTwoslash } from '@shikijs/vitepress-twoslash'
+import { createFileSystemTypesCache } from '@shikijs/vitepress-twoslash/cache-fs'
 import { defineConfig } from 'vitepress'
 
 const apiSidebar = JSON.parse(readFileSync(new URL('../api/_generated-sidebar.json', import.meta.url), 'utf8'))
 const gitRevision = process.env.GITHUB_SHA ?? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
 if (!/^[0-9a-f]{40}$/i.test(gitRevision)) throw new Error(`Invalid git revision: ${gitRevision}`)
+
+const guideTwoslashContext = {
+  name: 'guide-twoslash-context',
+  preprocess(code: string) {
+    const marker = code.match(/^\/\/ @guide-source (examples\/[a-z0-9-]+\/index\.(?:js|ts))#L(\d+)-L(\d+)\n/)
+    if (!marker) return
+    const startLine = Number(marker[2])
+    const endLine = Number(marker[3])
+    const sourceLines = readFileSync(resolve(marker[1]), 'utf8').replaceAll('\r\n', '\n').split('\n').map(line => line.trimEnd())
+    if (startLine < 1 || endLine < startLine || endLine > sourceLines.length) throw new Error(`Invalid guide source range: ${marker[0].trim()}`)
+    const visible = code.slice(marker[0].length).trimEnd()
+    const before = sourceLines.slice(0, startLine - 1).join('\n')
+    const after = sourceLines.slice(endLine).join('\n')
+    return `// @noErrors\n${before}\n// ---cut-before---\n${visible}\n// ---cut-after---\n${after}`
+  },
+}
 
 function wrapApiMembers(state: any) {
   const tokens = state.tokens
@@ -80,59 +98,35 @@ function wrapApiMembers(state: any) {
   state.tokens = out
 }
 
-function promotableExample(state: any, startLine: number, endLine: number, _silent: boolean): boolean {
-  const start = state.bMarks[startLine] + state.tShift[startLine]
-  const firstLine = state.src.slice(start, state.eMarks[startLine]).trimStart()
-  if (!firstLine.startsWith('<PromotableExample')) return false
+function componentBlockRule(component: string) {
+  const closingPattern = new RegExp(`^\\s*<\\/${component}>\\s*$`)
+  return function componentBlock(state: any, startLine: number, endLine: number, silent: boolean): boolean {
+    const start = state.bMarks[startLine] + state.tShift[startLine]
+    const firstLine = state.src.slice(start, state.eMarks[startLine]).trimStart()
+    if (!firstLine.startsWith(`<${component}`)) return false
 
-  let openingLine = startLine
-  while (openingLine < endLine && !/>\s*$/.test(state.src.slice(state.bMarks[openingLine], state.eMarks[openingLine]))) {
-    openingLine++
+    let openingLine = startLine
+    while (openingLine < endLine && !/>\s*$/.test(state.src.slice(state.bMarks[openingLine], state.eMarks[openingLine]))) openingLine++
+    if (openingLine >= endLine) return false
+
+    let closingLine = openingLine + 1
+    while (closingLine < endLine && !closingPattern.test(state.src.slice(state.bMarks[closingLine], state.eMarks[closingLine]))) closingLine++
+    if (closingLine >= endLine) return false
+    if (silent) return true
+
+    const openingEnd = openingLine + 1 < state.lineMax ? state.bMarks[openingLine + 1] : state.eMarks[openingLine]
+    const opening = state.src.slice(start, openingEnd)
+    const inner = state.src.slice(openingEnd, state.bMarks[closingLine])
+    const token = state.push('html_block', '', 0)
+    token.map = [startLine, closingLine + 1]
+    token.content = `${opening}${state.md.render(inner, state.env)}</${component}>\n`
+    state.line = closingLine + 1
+    return true
   }
-  if (openingLine >= endLine || !/>\s*$/.test(state.src.slice(state.bMarks[openingLine], state.eMarks[openingLine]))) return false
-
-  let closingLine = openingLine + 1
-  while (closingLine < endLine && !/^\s*<\/PromotableExample>\s*$/.test(state.src.slice(state.bMarks[closingLine], state.eMarks[closingLine]))) {
-    closingLine++
-  }
-  if (closingLine >= endLine) return false
-  if (_silent) return true
-
-  const openingEnd = openingLine + 1 < state.lineMax ? state.bMarks[openingLine + 1] : state.eMarks[openingLine]
-  const innerStart = openingEnd
-  const closingStart = state.bMarks[closingLine]
-  const opening = state.src.slice(start, openingEnd)
-  const inner = state.src.slice(innerStart, closingStart)
-  const token = state.push('html_block', '', 0)
-  token.map = [startLine, closingLine + 1]
-  token.content = `${opening}${state.md.render(inner, state.env)}</PromotableExample>\n`
-  state.line = closingLine + 1
-  return true
 }
 
-function guideSource(state: any, startLine: number, endLine: number, _silent: boolean): boolean {
-  const start = state.bMarks[startLine] + state.tShift[startLine]
-  const firstLine = state.src.slice(start, state.eMarks[startLine]).trimStart()
-  if (!firstLine.startsWith('<GuideSource')) return false
-
-  let openingLine = startLine
-  while (openingLine < endLine && !/>\s*$/.test(state.src.slice(state.bMarks[openingLine], state.eMarks[openingLine]))) openingLine++
-  if (openingLine >= endLine) return false
-
-  let closingLine = openingLine + 1
-  while (closingLine < endLine && !/^\s*<\/GuideSource>\s*$/.test(state.src.slice(state.bMarks[closingLine], state.eMarks[closingLine]))) closingLine++
-  if (closingLine >= endLine) return false
-  if (_silent) return true
-
-  const openingEnd = openingLine + 1 < state.lineMax ? state.bMarks[openingLine + 1] : state.eMarks[openingLine]
-  const opening = state.src.slice(start, openingEnd)
-  const inner = state.src.slice(openingEnd, state.bMarks[closingLine])
-  const token = state.push('html_block', '', 0)
-  token.map = [startLine, closingLine + 1]
-  token.content = `${opening}${state.md.render(inner, state.env)}</GuideSource>\n`
-  state.line = closingLine + 1
-  return true
-}
+const promotableExample = componentBlockRule('PromotableExample')
+const guideSource = componentBlockRule('GuideSource')
 
 export default defineConfig({
   vite: {
@@ -161,6 +155,14 @@ export default defineConfig({
     optimizeDeps: { include: ['monaco-editor'] },
   },
   markdown: {
+    codeTransformers: [
+      guideTwoslashContext,
+      transformerTwoslash({
+        explicitTrigger: true,
+        typesCache: createFileSystemTypesCache({ dir: 'docs/.vitepress/cache/twoslash' }),
+      }),
+    ],
+    languages: ['js', 'jsx', 'ts', 'tsx'],
     config(md) {
       md.block.ruler.before('html_block', 'promotable-example', promotableExample)
       md.block.ruler.before('html_block', 'guide-source', guideSource)
