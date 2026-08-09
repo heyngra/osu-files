@@ -105,6 +105,10 @@ export function createBeatmapSetModule(ctx: OsuFilesContext) {
                 validateOwnerHashes(ctx, set)
                 return true
               })
+              if (!result) {
+                transaction?.rollback()
+                return false
+              }
               transaction?.finalize()
               markChanged(ctx)
               ctx.logger.log('BeatmapSet', LogAction.Update, set.ID, before, rollbackState(set))

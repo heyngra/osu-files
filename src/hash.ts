@@ -2,7 +2,7 @@
 export function sha256(input: Uint8Array): string {
   const words = new Uint32Array(64)
   const bitLength = input.length * 8
-  const paddedLength = (((input.length + 9) + 63) >> 6) << 6
+  const paddedLength = Math.ceil((input.length + 9) / 64) * 64
   const data = new Uint8Array(paddedLength)
   data.set(input)
   data[input.length] = 0x80

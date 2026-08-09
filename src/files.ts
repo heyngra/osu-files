@@ -30,9 +30,7 @@ export function cleanupBlobIfUnreferenced(ctx: OsuFilesContext, hash: string): v
       if ([...(owner.Files ?? [])].some(usage => usage.File?.Hash === hash)) return
     }
   }
-  // Keep blobs referenced by an in-memory rollback entry. The old owner state
-  // may need this exact file if the edit is reverted before the log is cleared.
-  if (ctx.logger.entries.some(entry => containsValue(entry.before, hash) || containsValue(entry.after, hash))) return
+  if (hasRollbackReference(ctx, hash)) return
 
   const removed = ctx.fileStore.remove(hash)
   const file = getRealmFile(ctx, hash)
@@ -67,7 +65,7 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
     const hash = candidate.Hash as string
     try {
       const live = getRealmFile(ctx, hash)
-      if (!live || hasLiveReference(ctx, hash)) continue
+      if (!live || hasLiveReference(ctx, hash) || hasRollbackReference(ctx, hash)) continue
 
       if (ctx.fileStore?.remove(hash)) report.removed++
       else report.missing++
@@ -108,6 +106,12 @@ function hasLiveReference(ctx: OsuFilesContext, hash: string): boolean {
     }
   }
   return false
+}
+
+function hasRollbackReference(ctx: OsuFilesContext, hash: string): boolean {
+  return ctx.logger.entries.some(entry =>
+    (entry.entity === 'Skin' || entry.entity === 'BeatmapSet' || entry.entity === 'Score')
+    && containsValue(entry.before, hash))
 }
 
 function containsValue(value: unknown, needle: string): boolean {

@@ -1,5 +1,13 @@
 import { sha256 } from './hash.js'
 
+export type FileRefHasher = (input: Uint8Array) => string
+
+let hashContent: FileRefHasher = sha256
+
+export function setFileRefHasher(hasher: FileRefHasher): void {
+  hashContent = hasher
+}
+
 type RealmFileLike = { Hash?: string }
 type NamedFileUsageLike = { File?: RealmFileLike; Filename?: string }
 
@@ -40,7 +48,7 @@ export class FileRef {
     const content = source.content
 
     if (content && !hash) {
-      hash = sha256(content)
+      hash = hashContent(content)
     }
 
     if (!hash) {

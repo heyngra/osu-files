@@ -204,6 +204,10 @@ export function createSkinModule(ctx: OsuFilesContext): SkinModule {
                 validateOwnerHashes(ctx, { ...skin, Files: next, Hash: skin.Hash } as Skin)
                 return true
               })
+              if (!result) {
+                transaction?.rollback()
+                return false
+              }
               transaction?.finalize()
               markChanged(ctx)
               ctx.logger.log('Skin', LogAction.Update, skin.ID, before, rollbackState(skin))
