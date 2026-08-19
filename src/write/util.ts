@@ -37,6 +37,10 @@ export type Crud<T> = {
   upsert(input: Record<string, unknown>): T
 }
 
+function hasContentAddressedHash(entity: string): boolean {
+  return entity === 'File' || entity === 'Beatmap' || entity === 'Score'
+}
+
 /** Configuration that drives CRUD operations for a single Realm entity type. */
 export type EntityConfig = {
   /** Realm schema type name. @example 'Beatmap' */
@@ -117,9 +121,11 @@ export function createCrud<T>(ctx: OsuFilesContext, cfg: EntityConfig): Crud<T> 
         validateFilesPatch(input.Files, input.Hash)
       if (cfg.name === 'Beatmap' && input.Hash !== undefined) validateHashValue(input.Hash, 'Beatmap.Hash')
 
-      if (ctx.checkHash && !ctx.filesFolderPath) throw new ValidationError(`Can't verify hash, no files folder set.`)
-      
-      if (ctx.checkHash && ctx.filesFolderPath && input.Hash) {
+      const contentAddressedHash = hasContentAddressedHash(cfg.name)
+      if (ctx.checkHash && contentAddressedHash && !ctx.filesFolderPath)
+        throw new ValidationError(`Can't verify hash, no files folder set.`)
+
+      if (ctx.checkHash && contentAddressedHash && ctx.filesFolderPath && input.Hash) {
         if (!ctx.fileStore?.verify(input.Hash as string) && !ctx.fileTransaction?.has(input.Hash as string))
           throw new ValidationError(`File not found or invalid: ${input.Hash}`)
       }
