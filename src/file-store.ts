@@ -2,6 +2,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, rm
 import { readdirSync } from 'fs'
 import { basename, join, resolve } from 'path'
 import { tmpdir } from 'os'
+import { randomUUID } from 'crypto'
 import { fileStoragePath, ensureParentDir, promoteFile, sha256 } from './util.js'
 
 const HASH_RE = /^[a-f0-9]{64}$/
@@ -32,7 +33,13 @@ export class FileStore {
 
   /** Stores content after checking or calculating its SHA-256 hash.
    * @example
-   * const { hash } = store.put(content)
+   * import { FileStore } from 'osu-files'
+   *
+   * const store = new FileStore('./files')
+   * const content = Buffer.from('data')
+   * const stored = store.put(content)
+   *
+   * return stored.hash
    */
   put(content: Buffer, expectedHash?: string): { hash: string; created: boolean } {
     this.assertWritable()
@@ -88,7 +95,13 @@ export class FileStore {
    * @returns The stored file contents.
    * @throws If the file is missing, invalid, or fails verification.
    * @example
+   * import { FileStore } from 'osu-files'
+   *
+   * const store = new FileStore('./files', true)
+   * const hash = 'a'.repeat(64)
    * const content = store.read(hash)
+   *
+   * return content.length
    */
   read(hash: string, verify = true): Buffer {
     const path = this.path(hash)
@@ -102,7 +115,12 @@ export class FileStore {
    * @param hash - SHA-256 content address.
    * @returns `true` only when the file exists and matches its address.
    * @example
-   * if (!store.verify(hash)) throw new Error('Corrupt file')
+   * import { FileStore } from 'osu-files'
+   *
+   * const store = new FileStore('./files', true)
+   * const hash = 'a'.repeat(64)
+   *
+   * return store.verify(hash)
    */
   verify(hash: string): boolean {
     try {
@@ -134,7 +152,7 @@ export class FileStore {
   private tempPath(hash: string): string {
     const root = join(tmpdir(), 'osu-files', 'file-store')
     mkdirSync(root, { recursive: true })
-    return join(root, `${basename(this.basePath)}-${hash}-${process.pid}-${Date.now()}.tmp`)
+    return join(root, `${basename(this.basePath)}-${hash}-${process.pid}-${Date.now()}-${randomUUID()}.tmp`)
   }
 
   private assertWritable(): void {
@@ -275,16 +293,14 @@ export class FileStoreTransaction {
     this.promoted = []
   }
 
-  /** Removes staged content and files created by this transaction. */
+  /** Removes staged content. Promoted blobs remain until orphan cleanup because another concurrent transaction may reference them. */
   rollback(): void {
     if (this.finished) {
-      for (const path of this.promoted) rmSync(path, { force: true })
       this.promoted = []
       rmSync(this.manifestPath, { force: true })
       return
     }
     for (const temporary of this.staged.values()) rmSync(temporary, { force: true })
-    for (const path of this.promoted) rmSync(path, { force: true })
     this.staged.clear()
     this.promoted = []
     this.finished = true
@@ -342,6 +358,7 @@ function recoverFileStoreTransactions(basePath: string): void {
         pid?: number
       }
       if (manifest.basePath !== resolvedBasePath) continue
+      if (manifest.pid !== undefined && isProcessAlive(manifest.pid)) continue
       for (const path of manifest.staged ?? []) rmSync(path, { force: true })
       if (manifest.tempPrefix && manifest.pid) {
         const tempRoot = join(tmpdir(), 'osu-files', 'file-store')
@@ -358,6 +375,15 @@ function recoverFileStoreTransactions(basePath: string): void {
     } catch {
       // A malformed recovery record is retained for manual inspection.
     }
+  }
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
 }
 

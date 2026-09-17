@@ -12,6 +12,8 @@ import { computeLegacyScoreAttributes, convertFromLegacyTotalScore, roundHalfEve
 import type { Score, Beatmap, RealmUser, RealmNamedFileUsage } from '../schema/types.js'
 import { assertWritable, writeRealm } from '../context.js'
 import { getRealmFile } from '../files.js'
+import { BeatmapQuery } from '../get/beatmaps.get.js'
+import { RulesetQuery } from '../get/rulesets.get.js'
 
 /**
  * Options for importing an .osr replay into Realm.
@@ -211,14 +213,14 @@ function prepareScore(
   }
 
   const hash = sha256(buffer)
-  const beatmap = parsed.beatmapMD5 ? ctx.beatmaps.get.live().byMd5Equals(parsed.beatmapMD5)[0] as unknown as Beatmap | undefined : undefined
+  const beatmap = parsed.beatmapMD5 ? (ctx.beatmaps.get as unknown as BeatmapQuery).live().byMd5(parsed.beatmapMD5)[0] as unknown as Beatmap | undefined : undefined
   if (!beatmap) {
     if (requireBeatmap) throw new Error(`Beatmap with MD5 hash '${parsed.beatmapMD5}' not found in realm`)
     if (!suppressWarning) console.warn(`[osu-files] Beatmap '${parsed.beatmapMD5}' not found in realm, importing score without beatmap reference`)
   }
 
   const shortName = MODE_SHORTNAME[parsed.mode]
-  const ruleset = shortName ? ctx.rulesets.get.live().byShortNameEquals(shortName)[0] : undefined
+  const ruleset = shortName ? (ctx.rulesets.get as unknown as RulesetQuery).live().byShortName(shortName)[0] : undefined
   const acc = accuracy(parsed)
   const modsStr = buildMods(parsed)
   let { totalScore, totalScoreWithoutMods } = computeStandardisedScore(parsed, modsStr, ctx, beatmap, options)
@@ -308,7 +310,7 @@ function importOsrBuffer(ctx: OsuFilesContext, buffer: Buffer, options?: OsrImpo
 
   const onlineId = parsed.parsedExtra?.online_id ?? 0
   if (onlineId > 0) {
-    const existing = ctx.scores.get.byOnlineIdExact(onlineId)[0] as unknown as Score | undefined
+    const existing = ctx.scores.get.byOnlineId(onlineId)[0] as unknown as Score | undefined
     if (existing !== undefined) return parsed
   }
   if (parsed.onlineScoreID > 0) {

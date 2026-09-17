@@ -1,6 +1,7 @@
 import { describe, it, before } from 'node:test'
 import assert from 'node:assert'
 import { parseOsu } from '../src/beatmap/parse.js'
+import { serializeOsu } from '../src/beatmap/serialize.js'
 import { readZipEntries } from '../src/osz/import.js'
 import { SAMPLE_OSZ } from './helpers.js'
 
@@ -100,6 +101,45 @@ describe('Parse .osu', () => {
         assert.strictEqual(first.extras.curveType, 'B')
         assert.ok(first.extras.curvePoints.length > 0)
         assert.strictEqual(first.extras.repeats, 1)
+      }
+    })
+
+    it('preserves fractional Lazer hitobject values', () => {
+      const beatmap = parseOsu(`osu file format v128
+
+[HitObjects]
+123.5,45.25,1000.5,1,0,0:0:0:0:
+300.5,200.25,1500.75,2,0,B|400.5:300.25,1,100
+`)
+
+      assert.strictEqual(beatmap.hitObjects[0].x, 123.5)
+      assert.strictEqual(beatmap.hitObjects[0].y, 45.25)
+      assert.strictEqual(beatmap.hitObjects[0].time, 1000.5)
+      const slider = beatmap.hitObjects[1]
+      assert.strictEqual(slider.objectType, 'slider')
+      if (slider.objectType === 'slider')
+        assert.deepStrictEqual(slider.extras.curvePoints[0], { x: 400.5, y: 300.25 })
+    })
+
+    it('round-trips a slider tail when only non-leading fields are set', () => {
+      const beatmap = parseOsu(`osu file format v14
+
+[HitObjects]
+256,192,1000,2,0,B|300:200,1,100,,,0:2:3:70:
+`)
+      const slider = beatmap.hitObjects[0]
+      assert.strictEqual(slider.objectType, 'slider')
+      if (slider.objectType === 'slider') {
+        assert.strictEqual(slider.extras.additionSet, 2)
+        assert.strictEqual(slider.extras.customIndex, 3)
+        assert.strictEqual(slider.extras.sampleVolume, 70)
+        const roundTripped = parseOsu(serializeOsu(beatmap)).hitObjects[0]
+        assert.strictEqual(roundTripped.objectType, 'slider')
+        if (roundTripped.objectType === 'slider') {
+          assert.strictEqual(roundTripped.extras.additionSet, 2)
+          assert.strictEqual(roundTripped.extras.customIndex, 3)
+          assert.strictEqual(roundTripped.extras.sampleVolume, 70)
+        }
       }
     })
   })

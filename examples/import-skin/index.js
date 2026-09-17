@@ -1,3 +1,14 @@
+/** @satisfies {import('../../tools/docs/guide-schema.js').GuideMetadata} */
+const guide = {
+  group: 'skins',
+  groupTitle: 'Skins',
+  groupOrder: 40,
+  groupSummary: 'Import `.osk` archives into Realm or pack installed skins back into archives.',
+  title: 'import-skin',
+  order: 10,
+  summary: 'Imports an `.osk` archive into the Realm database and its file store.',
+  api: ['init', 'OsuFilesAPI.osk', 'ImportedSkinData'],
+}
 import readline from 'node:readline/promises'
 import init from 'osu-files'
 
@@ -16,6 +27,11 @@ const rl = readline.createInterface({
   })
 
   try {
+    /**
+     * @docs
+     * Import the archive in one call. The importer reads `skin.ini`, stores the archive's files, and creates the skin record in Realm.
+     */
+    /* @docs:start import-skin */
     console.log(`\nImporting ${oskPath}...`)
     const result = await initialized.osk.import(oskPath)
     console.log(`  Name:    ${result.name}`)
@@ -23,6 +39,7 @@ const rl = readline.createInterface({
     console.log(`  ID:      ${result.id}`)
     console.log(`  Files:   ${result.files}`)
     console.log(`  Hash:    ${result.hash}`)
+    /* @docs:end import-skin */
   } finally {
     initialized.close()
     rl.close()

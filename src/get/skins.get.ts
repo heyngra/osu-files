@@ -10,14 +10,14 @@ export class SkinQuery extends EntityQuery<Skin> {
   /** @example db.skins.get.byId(uuid)[0] */
   byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
 
-  /** @example db.skins.get.byNameEquals('WhiteCat')[0] */
-  byNameEquals(v: string)                { return this._str('Name', '==', v) }
+  /** @example db.skins.get.byName('WhiteCat')[0] */
+  byName(v: string)                      { return this._str('Name', '==', v) }
   /** @example db.skins.get.byNameContains('White') */
   byNameContains(v: string)              { return this._str('Name', 'CONTAINS[c]', v) }
   /** @example db.skins.get.byCreatorContains('cyperdark') */
   byCreatorContains(v: string)           { return this._str('Creator', 'CONTAINS[c]', v) }
-  /** @example db.skins.get.byHashEquals(hash) */
-  byHashEquals(v: string)                { return this._str('Hash', '==', v) }
+  /** @example db.skins.get.byHash(hash) */
+  byHash(v: string)                      { return this._str('Hash', '==', v) }
   /** @example db.skins.get.byInstantiationInfoContains('osu.Game') */
   byInstantiationInfoContains(v: string) { return this._str('InstantiationInfo', 'CONTAINS[c]', v) }
 

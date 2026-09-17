@@ -239,7 +239,7 @@ export type ParsedReplay = {
   additionalMods?: number
   /** @example Buffer.alloc(0) */
   rawReplayData: Buffer
-  /** @example [] // 1812 frames in Cookiezi replay */
+  /** @example [] // 7247 frames in Cookiezi replay */
   replayFrames: ReplayFrame[]
   /** @example null */
   rawExtraData: Buffer | null

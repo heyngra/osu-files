@@ -1,3 +1,14 @@
+/** @satisfies {import('../../tools/docs/guide-schema.js').GuideMetadata} */
+const guide = {
+  group: 'beatmaps',
+  groupTitle: 'Beatmaps',
+  groupOrder: 10,
+  groupSummary: 'Create, inspect, import, and export beatmaps and their storyboards.',
+  title: 'create-storyboard',
+  order: 10,
+  summary: 'Builds a beatmap and storyboard from three images, then imports the finished set.',
+  api: ['init', 'OsuFilesAPI.files', 'OsuFilesAPI.beatmap', 'OsuFilesAPI.sets', 'Storyboard', 'StoryboardSprite', 'StoryboardLoopingGroup', 'Anchor', 'Easing'],
+}
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import init, { Storyboard, StoryboardSprite, Anchor, Easing } from 'osu-files'
@@ -10,7 +21,13 @@ const sha256 = (content) => createHash('sha256').update(content).digest('hex')
 ;(async () => {
   const realmPath = await ask("osu!lazer client.realm: ")
   const filesPath = await ask("osu!lazer files folder: ")
+  /**
+   * @docs
+   * Open the Realm together with its files folder. This example writes both database records and file content, so it does not use read-only mode.
+   */
+  /* @docs:start open-realm */
   const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
+  /* @docs:end open-realm */
 
   try {
     const [bgPath, logoPath, spPath] = [
@@ -18,13 +35,24 @@ const sha256 = (content) => createHash('sha256').update(content).digest('hex')
       await ask("Logo image: "),
       await ask("Sparkle image: "),
     ]
+    /**
+     * @docs
+     * Read the three images and put each buffer in the content-addressed file store. The returned hash is what the beatmap set keeps in Realm.
+     */
+    /* @docs:start store-images */
     const [bgBuf, logoBuf, spBuf] = [readFileSync(bgPath), readFileSync(logoPath), readFileSync(spPath)]
     const images = [
       { filename: bgPath.split(/[\\/]/).pop(), content: bgBuf, hash: osu.files.put(bgBuf).hash },
       { filename: logoPath.split(/[\\/]/).pop(), content: logoBuf, hash: osu.files.put(logoBuf).hash },
       { filename: spPath.split(/[\\/]/).pop(), content: spBuf, hash: osu.files.put(spBuf).hash },
     ]
+    /* @docs:end store-images */
 
+    /**
+     * @docs
+     * A storyboard is split into layers. Here, every sprite goes into the foreground layer. Commands can be chained, which keeps a short animation readable without hiding its timing.
+     */
+    /* @docs:start build-storyboard */
     const sb = new Storyboard()
     const fg = sb.getLayer("Foreground")
     const bg = new StoryboardSprite(images[0], Anchor.Centre, { x: 320, y: 240 })
@@ -37,6 +65,7 @@ const sha256 = (content) => createHash('sha256').update(content).digest('hex')
     const loop = sp.addLoopingGroup(2000, 5)
     loop.addAlpha(Easing.None, 0, 400, 0.8, 0).addScale(Easing.None, 0, 400, 1.5, 0.5)
     fg.add(sp)
+    /* @docs:end build-storyboard */
     console.log(`\nStoryboard: ${fg.elements.length} sprites in Foreground`)
 
     const osuFile = 'storyboard-demo.osu'
@@ -55,12 +84,23 @@ const sha256 = (content) => createHash('sha256').update(content).digest('hex')
       ],
     }
 
+    /**
+     * @docs
+     * Serialize the plain beatmap object back to `.osu` text, then store that text like any other file.
+     */
+    /* @docs:start serialize-beatmap */
     const osuContent = osu.beatmap.serialize(beatmap)
     const osuHash = osu.files.put(Buffer.from(osuContent)).hash
+    /* @docs:end serialize-beatmap */
 
     const setHash = sha256(Buffer.from(osuContent))
     const allFiles = [{ hash: osuHash, filename: osuFile }, ...images.map(i => ({ hash: i.hash, filename: i.filename }))]
 
+    /**
+     * @docs
+     * Register the set after all of its files have hashes. `importSet` writes the set, beatmap, and file references in one operation.
+     */
+    /* @docs:start import-set */
     const result = osu.sets.importSet({
       onlineID: -1,
       setHash,
@@ -74,6 +114,7 @@ const sha256 = (content) => createHash('sha256').update(content).digest('hex')
         osuBeatmap: beatmap,
       }],
     })
+    /* @docs:end import-set */
 
     console.log(`\nImported set with hash ${result.setHash}`)
     console.log(`Beatmap written to: files/${osuHash[0]}/${osuHash.substring(0, 2)}/${osuHash}`)

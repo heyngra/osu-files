@@ -274,7 +274,7 @@ describe('Realm migrations', () => {
 
     const db = init(path)
     try {
-      assert.strictEqual(db.collections.get.byNameEquals('Favorites').length, 1)
+      assert.strictEqual(db.collections.get.byName('Favorites').length, 1)
     } finally {
       db.close()
       rmSync(root, { recursive: true, force: true })

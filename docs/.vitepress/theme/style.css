@@ -1,0 +1,226 @@
+/* Site-wide brand */
+:root {
+  --vp-c-brand-1: #c2255c;
+  --vp-c-brand-2: #a61e4d;
+  --vp-c-brand-3: #e5499a;
+  --vp-c-brand-soft: rgba(197, 37, 92, .13);
+  --vp-font-family-mono: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+html.dark {
+  --vp-c-brand-1: #f2a2d8;
+  --vp-c-brand-2: #ea76cb;
+  --vp-c-brand-3: #d63384;
+  --vp-c-brand-soft: rgba(234, 118, 203, .16);
+}
+
+::selection {
+  background: var(--vp-c-brand-soft);
+}
+
+/* ---- API reference ---- */
+
+.api-page .vp-doc > h1 {
+  font-size: 1.9rem;
+  line-height: 1.2;
+}
+
+/* Group headers (Constructors / Properties / Methods / ...) */
+.api-page .vp-doc > h2 {
+  display: inline-flex;
+  align-items: center;
+  margin: 2.1rem 0 .9rem;
+  border: 1px solid color-mix(in srgb, var(--vp-c-brand-1) 28%, transparent);
+  border-radius: 10px;
+  padding: .48rem .85rem;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.api-page .vp-doc > h2 .header-anchor { display: none; }
+
+/* Signature / return blockquotes -> mono chips */
+.api-page .vp-doc blockquote {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  margin: .6rem 0;
+  padding: .55rem .8rem;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-mono);
+  font-size: .82rem;
+  line-height: 1.6;
+}
+
+/* Top-level signature (function / variable pages) */
+.api-page .vp-doc > blockquote {
+  font-size: .95rem;
+  padding: .7rem 1rem;
+}
+
+/* Source links are quiet metadata */
+.api-page .vp-doc a[href*="github.com/heyngra/osu-files/blob/"] {
+  color: var(--vp-c-text-2);
+  font-family: var(--vp-font-family-mono);
+  font-size: .74rem;
+}
+
+/* Per-member cards */
+.api-page .api-member {
+  display: grid;
+  position: relative;
+  grid-template-columns: minmax(6.5rem, 8.5rem) minmax(0, 1fr);
+  column-gap: 1rem;
+  row-gap: .15rem;
+  align-items: start;
+  margin: .8rem 0;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  background: var(--vp-c-bg-soft);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.api-page .api-member > * { min-width: 0; }
+.api-page .api-member:hover {
+  border-color: color-mix(in srgb, var(--vp-c-brand-1) 45%, var(--vp-c-divider));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--vp-c-brand-1) 6%, transparent);
+}
+.api-page .api-member > h3 {
+  grid-column: 1;
+  margin: 0;
+  align-self: center;
+  font-family: var(--vp-font-family-mono);
+  font-size: .95rem;
+  color: var(--vp-c-text-1);
+}
+.api-page .api-member > h3 + blockquote { grid-column: 2; }
+.api-page .api-member > h3 .header-anchor { display: none; }
+.api-page .api-member > h3.api-outline-member {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  pointer-events: none;
+  scroll-margin-top: calc(var(--vp-nav-height) + 1rem);
+}
+.api-page .api-member > h3.api-outline-member + blockquote { grid-column: 1 / -1; }
+.api-page .api-member > h4 {
+  grid-column: 1;
+  margin: .25rem 0 0;
+  align-self: start;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+}
+.api-page .api-member > h4 + * { grid-column: 2; }
+.api-page .api-member > h5 {
+  grid-column: 1;
+  margin: .25rem 0 0;
+  align-self: start;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+}
+.api-page .api-member > h5 + * { grid-column: 2; }
+.api-page .api-member > .promotable-example { grid-column: 1 / -1; width: 100%; }
+.api-page .api-member > blockquote,
+.api-page .api-member > p,
+.api-page .api-member > table,
+.api-page .api-member > .language-ts,
+.api-page .api-member > .language-js,
+.api-page .api-member > .language-bash,
+.api-page .api-member > .language-text { grid-column: 1 / -1; }
+.api-page .api-member > h4 + *,
+.api-page .api-member > h5 + * { grid-column: 2; }
+.api-page .api-member > blockquote { margin: .15rem 0; }
+.api-page .api-member > p { margin: .25rem 0; }
+.api-page .api-member > table { margin: .15rem 0; }
+.api-page .api-member > h4 + table,
+.api-page .api-member > h4 + p,
+.api-page .api-member > h5 + table,
+.api-page .api-member > h5 + p,
+.api-page .api-member > h5 + .language-ts,
+.api-page .api-member > h5 + .language-js,
+.api-page .api-member > h5 + .language-bash,
+.api-page .api-member > h5 + .language-text { margin-top: .15rem; }
+.api-page .api-member hr { display: none; }
+
+/* Function pages: keep Parameters and Returns cards beside each other. */
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) fit-content(40%);
+  column-gap: 1rem;
+}
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > :not(.api-member) {
+  grid-column: 1 / -1;
+}
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member {
+  grid-column: span 1;
+  grid-template-columns: minmax(0, 1fr);
+  margin: .45rem 0 .8rem;
+}
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > h3,
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > table,
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > p,
+.api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member > blockquote {
+  grid-column: 1;
+}
+
+@media (max-width: 640px) {
+  .api-page .api-member { display: block; padding: .8rem .9rem; }
+  .api-page .api-member > h3 { margin: 0 0 .35rem; }
+  .api-page .api-member > h4,
+  .api-page .api-member > h5 { margin: .75rem 0 .2rem; }
+  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .api-page .vp-doc[class*="_api_generated_functions_"] > div:has(> .api-member) > .api-member {
+    grid-column: 1;
+  }
+}
+
+/* Collapse the empty <a id="..."> anchor paragraphs typedoc emits */
+.api-page .vp-doc p:has(> a[id]:only-child) {
+  margin: 0;
+  height: 0;
+  line-height: 0;
+}
+
+/* Tables (parameters, properties, enum members) */
+.api-page .vp-doc table {
+  width: 100%;
+  font-size: .82rem;
+}
+.api-page .vp-doc thead th {
+  font-family: var(--vp-font-family-mono);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.api-page .vp-doc th, .api-page .vp-doc td {
+  padding: .5rem .75rem;
+  vertical-align: top;
+}
+.api-page .vp-doc tbody tr {
+  transition: background .12s ease;
+}
+.api-page .vp-doc tbody tr:hover {
+  background: var(--vp-c-bg-soft);
+}
+.api-page .vp-doc td code {
+  white-space: normal;
+  word-break: break-word;
+}

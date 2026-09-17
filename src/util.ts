@@ -9,7 +9,7 @@ import { tmpdir } from 'os'
  * @example
  * sha256(buffer) // 'a1b2c3...'
  */
-export function sha256(buf: Buffer): string {
+export function sha256(buf: Uint8Array): string {
   return createHash('sha256').update(buf).digest('hex')
 }
 

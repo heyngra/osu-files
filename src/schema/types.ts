@@ -2,8 +2,8 @@ import type { BSON } from 'realm'
 import { RANK } from '../osr/types'
 
 /**
- * An osu! beatmap stored in the Realm database.
- * @example // access via `db.beatmaps.byId(id)`
+ * An osu! beatmap stored in Realm.
+ * @example // access via `db.beatmaps.get.byId(id)`
  */
 export type Beatmap = {
   ID: BSON.UUID
@@ -54,8 +54,8 @@ export type Beatmap = {
 }
 
 /**
- * A named collection of beatmaps identified by their MD5 hashes.
- * @example // access via `db.collections.byName('Favorites')`
+ * A named collection of beatmaps, identified by their MD5 hashes.
+ * @example // access via `db.collections.get.byName('Favorites')`
  */
 export type BeatmapCollection = {
   ID: BSON.UUID
@@ -207,8 +207,8 @@ export type RulesetSetting = {
 }
 
 /**
- * A score record in the Realm database.
- * @example // access via `db.scores.get.forBeatmap(md5Hash)`
+ * A score record stored in Realm.
+ * @example // access via `db.scores.get.byBeatmapMd5(md5Hash)`
  */
 export type Score = {
   ID: BSON.UUID

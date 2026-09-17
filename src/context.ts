@@ -46,12 +46,12 @@ export type OsuFilesContext = {
 }
 
 /**
- * Returns `true` if a files folder path is configured.
+ * Returns `true` when a files folder path is configured.
  * @returns Whether filesFolderPath is configured.
  * @example
- * if (hasFilesFolder({ filesFolderPath: './files' })) {
- *   await db.skins.importOsk('skin.osk')
- * }
+ * import { hasFilesFolder } from 'osu-files'
+ *
+ * return hasFilesFolder({ filesFolderPath: './files' })
  */
 export function hasFilesFolder(ctx: Pick<OsuFilesContext, 'filesFolderPath'>): boolean {
   return !!ctx.filesFolderPath

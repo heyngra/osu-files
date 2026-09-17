@@ -1,19 +1,24 @@
 import type { OsuFilesContext } from './context.js'
 import { MetadataQuery } from './get/metadata.get.js'
+import type { Metadata } from './get/facades.js'
+import type { BeatmapMetadata } from './schema/types.js'
 
 /**
- * Creates the beatmap metadata sub-module with query operations.
+ * Creates the read-only beatmap metadata module.
  * @example
  * const meta = db.metadata.get.byTitleContains('Make')[0]
  */
-export function createBeatmapMetadataModule(ctx: OsuFilesContext) {
+export function createBeatmapMetadataModule(ctx: OsuFilesContext): BeatmapMetadataModule {
   const q = new MetadataQuery(ctx.realm)
   q.enableCache = ctx.queryCache ?? true
   return {
-    /** Queries readonly beatmap metadata snapshots. */
-    get: q.proxify(),
+    /** Returns read-only metadata snapshots through `get`. */
+    get: q.proxify() as unknown as Metadata,
   }
 }
 
-/** Beatmap metadata sub-module with query operations only. */
-export type BeatmapMetadataModule = ReturnType<typeof createBeatmapMetadataModule>
+/** Read-only beatmap metadata module. */
+export type BeatmapMetadataModule = {
+  /** Returns read-only metadata snapshots through `get`. */
+  readonly get: Metadata
+}

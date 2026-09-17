@@ -17,10 +17,10 @@ function canWrap(value: unknown): value is object {
 }
 
 /**
- * Buffers edits until commit or dispose.
+ * Keeps edits in memory until you commit or dispose of the session.
  *
  * @example
- * using session = db.beatmaps.get.byMetadataAuthorContains('Monstrata').autoEdit()
+ * using session = db.beatmaps.get.byAuthorContains('Monstrata').autoEdit()
  * for (const beatmap of session)
  *   beatmap.Metadata!.Author!.Username = 'Sotarks'
  * // Commits here and records rollback entries.
@@ -33,10 +33,10 @@ export class EditSession<T> implements Iterable<T> {
   private readonly rootList: Root[]
   private closed = false
 
-  /**
-   * Creates an edit session over Realm objects.
+   /**
+   * Creates an edit session for Realm objects.
    *
-   * Most callers should use {@link EntityQuery.autoEdit} instead.
+   * You probably should call `autoEdit()` on a result instead of constructing it manually.
    *
    * @example
    * const session = db.beatmaps.get.byBpmAbove(180).autoEdit()

@@ -8,13 +8,13 @@ export class SetQuery extends EntityQuery<BeatmapSet> {
   /** @example db.sets.get.byId(uuid)[0] */
   byId(v: string | Realm.BSON.UUID)             { return this._byUuidPk(v) }
 
-  /** @example db.sets.get.byOnlineIdExact(506483)[0] */
-  byOnlineIdExact(v: number)             { return this._num('OnlineID', '==', v) }
-  /** @example db.sets.get.byStatusExact(1) */
-  byStatusExact(v: number)               { return this._num('Status', '==', v) }
+  /** @example db.sets.get.byOnlineId(506483)[0] */
+  byOnlineId(v: number)                  { return this._num('OnlineID', '==', v) }
+  /** @example db.sets.get.byStatus(1) */
+  byStatus(v: number)                    { return this._num('Status', '==', v) }
 
-  /** @example db.sets.get.byHashEquals(hash)[0] */
-  byHashEquals(v: string)                { return this._str('Hash', '==', v) }
+  /** @example db.sets.get.byHash(hash)[0] */
+  byHash(v: string)                      { return this._str('Hash', '==', v) }
 
   /** @example db.sets.get.byDeletePending(true) */
   byDeletePending(v: boolean)            { return this._bool('DeletePending', v) }

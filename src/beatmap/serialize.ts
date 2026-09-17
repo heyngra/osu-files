@@ -116,7 +116,7 @@ function serializeSliderExtras(e: SliderExtras): string {
     ? e.edgeAdditions.map(a => `${a.sampleSet}:${a.additionSet}`).join('|')
     : ''
   let tail = ''
-  if (e.sampleSet !== undefined || e.filename !== undefined) {
+  if (e.sampleSet !== undefined || e.additionSet !== undefined || e.customIndex !== undefined || e.sampleVolume !== undefined || e.filename !== undefined) {
     const parts = [
       e.sampleSet ?? 0,
       e.additionSet ?? 0,
@@ -168,7 +168,12 @@ function writeHitObjects(objects: HitObject[]): string {
  * Serializes an OsuBeatmap back to .osu text format.
  * @returns .osu file content as string.
  * @example
- * serializeOsu(beatmap) // 'osu file format v14\\n\\n[General]...'
+ * import { parseOsu, serializeOsu } from 'osu-files'
+ *
+ * const beatmap = parseOsu(source)
+ * const text = serializeOsu(beatmap)
+ *
+ * return text.split('\\n').slice(0, 4).join('\\n')
  */
 export function serializeOsu(beatmap: OsuBeatmap): string {
   const sections: string[] = [

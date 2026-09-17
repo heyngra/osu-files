@@ -52,7 +52,14 @@ function parseSplitInts(v: string, sep: string): number[] {
  * Parses .osu file content into a structured OsuBeatmap object.
  * @returns Parsed beatmap object.
  * @example
- * parseOsu(fs.readFileSync('song.osu', 'utf-8'))
+ * import { parseOsu } from 'osu-files'
+ *
+ * const beatmap = parseOsu(source)
+ *
+ * return {
+ *   title: beatmap.metadata.title,
+ *   objects: beatmap.hitObjects.length,
+ * }
  */
 export function parseOsu(content: string): OsuBeatmap {
   const lines = content.split(/\r?\n/)
@@ -151,7 +158,7 @@ export function parseOsu(content: string): OsuBeatmap {
         parseColourLine(line, colours)
         break
       case 'HitObjects':
-        parseHitObjectLine(line, hitObjects, timingOffset)
+        parseHitObjectLine(line, hitObjects, timingOffset, fileFormat)
         break
     }
   }
@@ -273,7 +280,7 @@ function parseEventLine(line: string, events: OsuEvent[], timingOffset = 0): voi
     case 1: {
       events.push({
         type: 'video',
-        startTime: parseInt(parts[1]?.trim()) + timingOffset,
+        startTime: parseFloat(parts[1]?.trim()) + timingOffset,
         filename: parts[2]?.replace(/^"|"$/g, '') ?? '',
         xOffset: parseInt(parts[3]?.trim()) || 0,
         yOffset: parseInt(parts[4]?.trim()) || 0,
@@ -283,8 +290,8 @@ function parseEventLine(line: string, events: OsuEvent[], timingOffset = 0): voi
     case 2: {
       events.push({
         type: 'break',
-        startTime: (parseInt(parts[1]?.trim()) || 0) + timingOffset,
-        endTime: (parseInt(parts[2]?.trim()) || 0) + timingOffset,
+        startTime: (parseFloat(parts[1]?.trim()) || 0) + timingOffset,
+        endTime: (parseFloat(parts[2]?.trim()) || 0) + timingOffset,
       })
       break
     }
@@ -320,13 +327,14 @@ function parseColourLine(line: string, colours: OsuColour[]): void {
 }
 
 
-function parseHitObjectLine(line: string, objects: HitObject[], timingOffset = 0): void {
+function parseHitObjectLine(line: string, objects: HitObject[], timingOffset = 0, fileFormat = 14): void {
   const parts = line.split(',')
   if (parts.length < 5) return
 
-  const x = parseInt(parts[0].trim())
-  const y = parseInt(parts[1].trim())
-  const time = parseInt(parts[2].trim()) + timingOffset
+  const parsePosition = fileFormat >= 128 ? parseFloat : parseInt
+  const x = parsePosition(parts[0].trim())
+  const y = parsePosition(parts[1].trim())
+  const time = parseFloat(parts[2].trim()) + timingOffset
   const type = parseInt(parts[3].trim())
   const hitSound = parseInt(parts[4].trim())
   const isNewCombo = (type & 4) !== 0
@@ -341,7 +349,7 @@ function parseHitObjectLine(line: string, objects: HitObject[], timingOffset = 0
   if (type & 8) {
     objects.push(parseSpinner(base, rawExtras, timingOffset))
   } else if (type & 2) {
-    objects.push(parseSlider(base, rawExtras))
+    objects.push(parseSlider(base, rawExtras, fileFormat >= 128))
   } else if (type & 128) {
     objects.push(parseHold(base, rawExtras, timingOffset))
   } else {
@@ -362,7 +370,7 @@ function parseCircle(base: HitObjectBase, extras: string): HitCircle {
   }
 }
 
-function parseSlider(base: HitObjectBase, extras: string): HitSlider {
+function parseSlider(base: HitObjectBase, extras: string, fractionalCoordinates = false): HitSlider {
   const parts = extras.split(',')
 
   const curveRaw = parts[0] ?? ''
@@ -371,7 +379,8 @@ function parseSlider(base: HitObjectBase, extras: string): HitSlider {
   const curvePoints = curvePointsRaw
     ? curvePointsRaw.split('|').map(pt => {
         const [px, py] = pt.split(':')
-        return { x: parseInt(px), y: parseInt(py) }
+        const parsePosition = fractionalCoordinates ? parseFloat : parseInt
+        return { x: parsePosition(px), y: parsePosition(py) }
       })
     : []
 
@@ -432,7 +441,7 @@ function parseDuration(base: HitObjectBase, extras: string, objectType: 'spinner
     ...base,
     objectType,
     extras: {
-      endTime: (parseInt(endTime) || 0) + timingOffset,
+      endTime: (parseFloat(endTime) || 0) + timingOffset,
       sampleSet: tailParts[0] ? parseInt(tailParts[0]) : undefined,
       additionSet: tailParts[1] ? parseInt(tailParts[1]) : undefined,
       customIndex: tailParts[2] ? parseInt(tailParts[2]) : undefined,

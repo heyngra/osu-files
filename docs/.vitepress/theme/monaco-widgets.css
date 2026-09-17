@@ -1,0 +1,93 @@
+/*
+ * Monaco injects suggest/hover widgets at runtime, so they are styled here
+ * (global) instead of in the scoped component styles. Surfaces reuse the
+ * VitePress tokens so the widgets blend with the page.
+ */
+
+/* Let floating widgets escape the small editor card (Monaco root is
+   overflow: visible by default; this keeps it that way against regressions). */
+.api-example .monaco-editor {
+  overflow: visible !important;
+}
+
+/* ---- Suggest widget (autocomplete) ---- */
+
+.api-example .monaco-editor .suggest-widget,
+.api-example .monaco-editor .suggest-details {
+  border-radius: 10px;
+  overflow: hidden;
+  border-color: var(--vp-c-divider) !important;
+  background-color: var(--vp-c-bg) !important;
+  color: var(--vp-c-text-1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.api-example .monaco-editor .suggest-widget .monaco-list .monaco-list-row {
+  margin: .08rem .35rem;
+  border-radius: 6px;
+  padding-right: .5rem;
+}
+.api-example .monaco-editor .suggest-widget .monaco-list .monaco-list-row.focused {
+  background: var(--vp-c-brand-soft) !important;
+  color: var(--vp-c-brand-1) !important;
+  outline: none;
+}
+.api-example .monaco-editor .suggest-widget .monaco-list .monaco-list-row:not(.focused) > .contents > .main .monaco-icon-label {
+  color: var(--vp-c-text-1);
+}
+.api-example .monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .right > .details-label,
+.api-example .monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .left > .signature-label,
+.api-example .monaco-editor .suggest-widget .monaco-list .monaco-list-row > .contents > .main > .left > .qualifier-label {
+  color: var(--vp-c-text-3);
+}
+.api-example .monaco-editor .suggest-widget .monaco-highlighted-label .highlight {
+  color: var(--vp-c-brand-1) !important;
+  font-weight: 600;
+}
+.api-example .monaco-editor .suggest-widget .message {
+  color: var(--vp-c-text-3);
+  font-size: .74rem;
+}
+.api-example .monaco-editor .suggest-details {
+  font-size: .74rem;
+  color: var(--vp-c-text-1);
+}
+.api-example .monaco-editor .suggest-details code {
+  background: var(--vp-c-bg-alt);
+  border-radius: 5px;
+}
+
+/* ---- Hover widget ---- */
+
+.api-example .monaco-editor .monaco-resizable-hover,
+.api-example .monaco-editor .monaco-hover {
+  border-radius: 10px !important;
+  border-color: var(--vp-c-divider) !important;
+  background-color: var(--vp-c-bg) !important;
+  color: var(--vp-c-text-1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.api-example .monaco-editor .monaco-hover code {
+  background: var(--vp-c-bg-alt);
+  border-radius: 5px;
+  padding: 0 .3em;
+}
+.api-example .monaco-editor .monaco-hover .hover-row .actions {
+  background: var(--vp-c-bg-alt) !important;
+  border-top: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-3);
+}
+
+/* ---- Parameter hints widget ---- */
+
+.api-example .monaco-editor .parameter-hints-widget {
+  border-radius: 10px !important;
+  border-color: var(--vp-c-divider) !important;
+  background-color: var(--vp-c-bg) !important;
+  color: var(--vp-c-text-1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.api-example .monaco-editor .parameter-hints-widget .signature .parameter.active {
+  color: var(--vp-c-brand-1) !important;
+}

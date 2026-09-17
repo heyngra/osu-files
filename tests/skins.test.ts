@@ -275,7 +275,7 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
     const osu = init(join(queryRoot, 'client.realm'), { schemaVersion: 51, filesFolderPath: join(queryRoot, 'files') })
     const result = await osu.osk.import(SAMPLE_OSK)
 
-    const foundHash = osu.skins.get.byHashEquals(result.hash)
+    const foundHash = osu.skins.get.byHash(result.hash)
     assert.strictEqual(foundHash.length, 1)
 
     const foundCreator = osu.skins.get.byCreatorContains('cyperdark')
@@ -303,6 +303,12 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
     assert.ok(before)
     assert.ok(before.general.name)
     const oldHash = skin.Hash
+    const oldIniHash = [...skin.Files].find(file => file.Filename?.toLowerCase() === 'skin.ini')?.File?.Hash
+    assert.ok(oldIniHash)
+    const editor = osu.skins.open(String(skin.ID)).getFile('skin.ini')
+    const logLength = osu.logger.entries.length
+    assert.strictEqual(await editor.replace(editor.read()), false)
+    assert.strictEqual(osu.logger.entries.length, logLength)
     assert.strictEqual(osu.skins.editIni(String(skin.ID), ini => {
       ini.general.animationFramerate = 120
     }), true)
@@ -311,6 +317,12 @@ describe('Import/Export .osk', { timeout: 120000 }, () => {
     }), false)
     assert.strictEqual(osu.skins.get[0].Hash === oldHash, false)
     assert.strictEqual(osu.skins.readIni(String(skin.ID))?.general.animationFramerate, 120)
+    const cleanup = osu.files.cleanupOrphanedFiles()
+    assert.strictEqual(cleanup.removed, 0)
+    assert.strictEqual(osu.files.verify(oldIniHash), true)
+    assert.strictEqual(osu.logger.rollbackLast(), true)
+    assert.strictEqual(osu.skins.get.byId(String(skin.ID))[0].Hash, oldHash)
+    assert.notStrictEqual(osu.skins.readIni(String(skin.ID))?.general.animationFramerate, 120)
     osu.close()
   })
 })

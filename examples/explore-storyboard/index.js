@@ -1,3 +1,11 @@
+/** @satisfies {import('../../tools/docs/guide-schema.js').GuideMetadata} */
+const guide = {
+  group: 'beatmaps',
+  title: 'explore-storyboard',
+  order: 20,
+  summary: 'Opens a beatmap and lets you browse its storyboard one layer and element at a time.',
+  api: ['init', 'OsuFilesAPI.sets', 'OsuFilesAPI.beatmap', 'OsuBeatmap', 'Storyboard', 'StoryboardLayer', 'StoryboardCommandGroup'],
+}
 import init from 'osu-files'
 import readline from 'node:readline/promises'
 
@@ -57,12 +65,16 @@ function showDetails(el) {
   const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
 
   try {
-    // Query results are detached snapshots; this example only inspects them.
-    // Use osu.sets.open(id) or osu.beatmap.save(...) for persisted edits.
+    /**
+     * @docs
+     * Start with the available sets. The labels use the first beatmap's metadata so the picker shows an artist and title instead of a Realm ID.
+     */
+    /* @docs:start list-sets */
     const sets = osu.sets.get.map(s => ({
       item: s,
       label: `${s.Beatmaps?.[0]?.Metadata?.Artist} - ${s.Beatmaps?.[0]?.Metadata?.Title} (#${s.OnlineID})`
     }))
+    /* @docs:end list-sets */
 
     const set = await pick(sets, "Beatmap sets")
     if (!set) return
@@ -71,17 +83,34 @@ function showDetails(el) {
     const beatmap = await pick(diffs, "Difficulties")
     if (!beatmap) return
 
+    /**
+     * @docs
+     * Realm only stores the beatmap record. `getFullData` also reads and parses the `.osu` file, which is where the storyboard lives.
+     */
+    /* @docs:start load-storyboard */
     const data = osu.beatmap.getFullData(String(beatmap.ID))
     if (!data?.storyboard) { console.log("No storyboard on this beatmap."); return }
 
     const sb = data.storyboard
+    /* @docs:end load-storyboard */
+
+    /**
+     * @docs-note
+     * Query results are detached, read-only snapshots. Use `osu.sets.open(id)` or `osu.beatmap.save(...)` when you need to keep an edit.
+     */
 
     while (true) {
+      /**
+       * @docs
+       * Each layer contains sprites, animations, and samples. Pick an element to print its commands, including commands nested in loops and triggers.
+       */
+      /* @docs:start inspect-layers */
       const layers = [...sb.layers.entries()].map(([name, layer]) => ({
         item: { name, layer },
         label: `${name} (${layer.elements.length} elements)`,
       }))
-      const picked = await pick(layers, `Layers — ${beatmap.DifficultyName} (q=quit)`)
+      const picked = await pick(layers, `Layers - ${beatmap.DifficultyName} (q=quit)`)
+      /* @docs:end inspect-layers */
       if (!picked) return
 
       const { name, layer } = picked
@@ -90,7 +119,7 @@ function showDetails(el) {
           item: el,
           label: el.frameCount ? `Animation "${el.path}"` :
                  el.startTime != null && el.volume != null ? `Sample "${el.path}"` :
-                 `Sprite "${el.path}" — ${ANCHOR[el.origin] ?? el.origin} (${el.initialPosition.x},${el.initialPosition.y})`
+                 `Sprite "${el.path}" - ${ANCHOR[el.origin] ?? el.origin} (${el.initialPosition.x},${el.initialPosition.y})`
         }))
         const el = await pick(els, `Layer "${name}" (b=back, q=quit)`)
         if (!el) break

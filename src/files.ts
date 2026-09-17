@@ -3,7 +3,8 @@ import type { File, RealmFile } from './schema/types.js'
 import { FileRef } from './types.js'
 import type { OsuFilesContext } from './context.js'
 import { FileQuery } from './get/files.get.js'
-import { createCrud } from './write/util.js'
+import type { Files } from './get/facades.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { fileStoragePath } from './util.js'
 import { assertWritable, markChanged, writeRealm } from './context.js'
@@ -29,9 +30,15 @@ export function cleanupBlobIfUnreferenced(ctx: OsuFilesContext, hash: string): v
       if ([...(owner.Files ?? [])].some(usage => usage.File?.Hash === hash)) return
     }
   }
+  if (hasRollbackReference(ctx, hash)) return
+
+  const removed = ctx.fileStore.remove(hash)
   const file = getRealmFile(ctx, hash)
-  if (file) writeRealm(ctx, () => ctx.realm.delete(file))
-  ctx.fileStore.remove(hash)
+  if (file && (removed || !ctx.fileStore.hasPath(hash)))
+    writeRealm(ctx, () => {
+      const live = getRealmFile(ctx, hash)
+      if (live) ctx.realm.delete(live)
+    })
 }
 
 /**
@@ -54,15 +61,22 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
   report.candidates = orphaned.length
   if (orphaned.length === 0) return report
 
-  const orphanedHashes = orphaned.map(file => file.Hash as string)
-  writeRealm(ctx, () => {
-    for (const file of orphaned) ctx.realm.delete(file)
-  })
-
-  for (const hash of orphanedHashes) {
+  for (const candidate of orphaned) {
+    const hash = candidate.Hash as string
     try {
+      const live = getRealmFile(ctx, hash)
+      if (!live || hasLiveReference(ctx, hash) || hasRollbackReference(ctx, hash)) continue
+
       if (ctx.fileStore?.remove(hash)) report.removed++
       else report.missing++
+
+      // Remove metadata only after storage deletion succeeds (or confirms the
+      // blob was already missing), so a transient storage failure is retryable.
+      const current = getRealmFile(ctx, hash)
+      if (current) writeRealm(ctx, () => {
+        const latest = getRealmFile(ctx, hash)
+        if (latest) ctx.realm.delete(latest)
+      })
     } catch (error) {
       report.failed.push({ hash, error })
     }
@@ -71,7 +85,7 @@ export function cleanupOrphanedFiles(ctx: OsuFilesContext): FileCleanupReport {
   return report
 }
 
-function findOrphanedFilesByScan(ctx: OsuFilesContext): File[] {
+function findOrphanedFilesByScan(ctx: OsuFilesContext): RealmFile[] {
   const referenced = new Set<string>()
   for (const src of [ctx.sets.get, ctx.skins.get, ctx.scores.get]) {
     for (const s of src) {
@@ -79,20 +93,46 @@ function findOrphanedFilesByScan(ctx: OsuFilesContext): File[] {
       for (const u of s.Files) if (u.File?.Hash) referenced.add(u.File.Hash)
     }
   }
-  return ctx.files.get.filter(f => f.Hash && !referenced.has(f.Hash)) as unknown as File[]
+  return ctx.files.get
+    .filter(f => f.Hash && !referenced.has(f.Hash))
+    .map(f => getRealmFile(ctx, f.Hash!))
+    .filter((file): file is RealmFile => !!file)
+}
+
+function hasLiveReference(ctx: OsuFilesContext, hash: string): boolean {
+  for (const type of ['Skin', 'BeatmapSet', 'Score']) {
+    for (const owner of ctx.realm.objects<{ Files?: Iterable<{ File?: { Hash?: string } }> }>(type)) {
+      if ([...(owner.Files ?? [])].some(usage => usage.File?.Hash === hash)) return true
+    }
+  }
+  return false
+}
+
+function hasRollbackReference(ctx: OsuFilesContext, hash: string): boolean {
+  return ctx.logger.entries.some(entry =>
+    (entry.entity === 'Skin' || entry.entity === 'BeatmapSet' || entry.entity === 'Score')
+    && containsValue(entry.before, hash))
+}
+
+function containsValue(value: unknown, needle: string): boolean {
+  if (value === needle) return true
+  if (Array.isArray(value)) return value.some(item => containsValue(item, needle))
+  if (value && typeof value === 'object')
+    return Object.values(value as Record<string, unknown>).some(item => containsValue(item, needle))
+  return false
 }
 
 /**
- * Creates the file sub-module with query, write, and orphan cleanup operations.
+ * Creates the file module with read-only results, write operations, and orphan cleanup.
  * @example
- * const f = db.files.get.byHashEquals(hash)[0]
+ * const f = db.files.get.byHash(hash)[0]
  */
 export function createFileModule(ctx: OsuFilesContext) {
   const fileQuery = new FileQuery(ctx.realm)
   fileQuery.enableCache = ctx.queryCache ?? true
   const get = fileQuery.proxify()
   return {
-    get,
+    get: get as unknown as Files,
     store: ctx.fileStore,
     /** Stores a verified content-addressed file.
      * @example
@@ -135,11 +175,11 @@ export function createFileModule(ctx: OsuFilesContext) {
   }
 }
 
-/** File sub-module with query, write, and orphan cleanup operations. */
+/** File module with read-only results, write operations, and orphan cleanup. */
 export type FileUpdatePatch = never
 export interface FileModule {
-  /** Queries readonly file snapshots. */
-  readonly get: ReturnType<FileQuery['proxify']>
+  /** Returns read-only file snapshots through `get`. */
+  readonly get: Files
   /** Stores files in the content-addressed store. */
   readonly store?: FileStore
   /** Stores a file and returns its hash. */
@@ -149,7 +189,7 @@ export interface FileModule {
   /** Checks a stored file. */
   verify(hash: string): boolean
   /** File records cannot be updated. */
-  readonly write: ReturnType<typeof createCrud<File>>
+  readonly write: Crud<File>
   /** Deletes unreferenced files. */
   cleanupOrphanedFiles(): FileCleanupReport
   /** Creates a file reference. */

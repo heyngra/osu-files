@@ -2,15 +2,17 @@ import Realm from 'realm'
 import type { Score } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { ScoreQuery } from './get/scores.get.js'
-import { createCrud } from './write/util.js'
+import type { Scores } from './get/facades.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import type { ParsedReplay } from './osr/types.js'
 import { parseOsr as parseReplay } from './osr/parse.js'
 import { sha256 } from './util.js'
-import { assertWritable, writeRealm } from './context.js'
+import { assertWritable, markChanged, writeRealm } from './context.js'
 import { validateOwnerHashes } from './integrity.js'
 import { cleanupBlobIfUnreferenced, getRealmFile } from './files.js'
 import type { ScoreSnapshot } from './types/readonly.js'
+import { LogAction } from './write/logger.js'
 
 export type ScoreEditor = {
   /** Score UUID. */
@@ -21,8 +23,20 @@ export type ScoreEditor = {
   editReplay(transform: (content: Buffer) => Buffer | Promise<Buffer>): Promise<boolean>
 }
 
+function rollbackState(score: Score): Record<string, unknown> {
+  return {
+    Hash: score.Hash ?? null,
+    MaxCombo: score.MaxCombo,
+    Date: score.Date,
+    Files: [...score.Files].map(usage => ({
+      Filename: usage.Filename ?? null,
+      ...(usage.File?.Hash ? { File: { Hash: usage.File.Hash } } : {}),
+    })),
+  }
+}
+
 /**
- * Creates the score sub-module with query and write operations.
+ * Creates the score module with read-only results and write operations.
  * @example
  * const sc = db.scores.get.byAccuracyAbove(0.95)[0]
  */
@@ -31,7 +45,7 @@ export function createScoreModule(ctx: OsuFilesContext) {
   q.enableCache = ctx.queryCache ?? true
   const get = q.proxify()
   return {
-    get,
+    get: get as unknown as Scores,
     write: createCrud<Score>(ctx, getConfig('Score')!),
     /**
      * Opens a score for replay-aware copy-on-write editing.
@@ -60,6 +74,7 @@ export function createScoreModule(ctx: OsuFilesContext) {
           const parsed: ParsedReplay = parseReplay(content)
           const nextHash = sha256(content)
           if (nextHash === originalHash) return false
+          const before = rollbackState(score)
           const transaction = ctx.fileStore.beginTransaction()
           const checkpoint = ctx.logger.checkpoint()
           const previousTransaction = ctx.fileTransaction
@@ -77,6 +92,8 @@ export function createScoreModule(ctx: OsuFilesContext) {
               return true
             })
             transaction.finalize()
+            markChanged(ctx)
+            ctx.logger.log('Score', LogAction.Update, score.ID, before, rollbackState(score))
             cleanupBlobIfUnreferenced(ctx, originalHash)
             return result
           } catch (error) {
@@ -90,13 +107,13 @@ export function createScoreModule(ctx: OsuFilesContext) {
   }
 }
 
-/** Score sub-module with query and write operations. */
+/** Score module with read-only results and write operations. */
 export type ScoreUpdatePatch = Partial<Omit<Score, 'ID' | 'Hash' | 'Files'>>
 export interface ScoreModule {
-  /** Queries readonly score snapshots. */
-  readonly get: ReturnType<ScoreQuery['proxify']>
+  /** Returns read-only score snapshots through `get`. */
+  readonly get: Scores
   /** Creates, updates, deletes, or upserts scores. */
-  readonly write: ReturnType<typeof createCrud<Score>>
+  readonly write: Crud<Score>
   /** Opens one replay editor. */
   open(scoreId: string): ScoreEditor
 }

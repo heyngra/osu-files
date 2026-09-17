@@ -1,4 +1,4 @@
-import type { OsuFilesAPI } from '../../src/index.js'
+import type { BeatmapSnapshot, Beatmaps, OsuFilesAPI } from '../../src/index.js'
 import { FileRef } from '../../src/types.js'
 
 declare const db: OsuFilesAPI
@@ -14,13 +14,27 @@ if (skin) {
   skin.Files[0].File!.Hash = 'fake'
 }
 
+const maps: Beatmaps = db.beatmaps.get
+const mapSnapshot: BeatmapSnapshot | undefined = maps.first()
+void mapSnapshot
+maps.all()
+maps.toArray()
+maps.byOnlineId(506483).byTitleContains('Move')
+
+// Embedded settings and metadata are read-only results.
+// @ts-expect-error embedded settings do not expose entity writes
+db.rulesetSettings.get.write
+// @ts-expect-error embedded metadata does not expose entity writes
+db.metadata.get.write
+
 for (const value of db.skins.get) {
   // @ts-expect-error iteration is readonly
   value.Name = 'Changed'
 }
 
-// @ts-expect-error live values are readonly
-db.skins.get.live().byId(id)[0].Name = 'Changed'
+// Live Realm values stay outside the public result types.
+// @ts-expect-error live access is internal
+db.skins.get.live()
 // @ts-expect-error derived hash
 db.skins.write.update(id, { Hash: 'fake' })
 // @ts-expect-error protected file references
@@ -45,3 +59,7 @@ void sliced
 
 await db.skins.open(id).getFile('button-left.png').edit(async content => content)
 await db.scores.open(id).editReplay(async content => content)
+
+db.collections.exportLegacy(db.collections.get)
+const collection = db.collections.get.first()
+if (collection) db.collections.exportLegacy(collection)

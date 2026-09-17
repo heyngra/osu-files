@@ -96,22 +96,36 @@ export function parseOsr(buffer: Buffer): ParsedReplay {
 }
 
 /**
- * Parses replay frames from a decompressed comma-separated string.
+ * Parses replay frames from a decompressed comma-separated string. Lazer
+ * stores each frame as `delta|x|y|keys`; the legacy flat scalar form is also
+ * accepted for callers that use this standalone helper.
  * @returns Array of replay frames.
  * @example
- * parseReplayFrames('0,100,200,1,16,101,201,0') // [{ timeDelta: 0, mouseX: 100, ... }, ...]
+ * parseReplayFrames('0|100|200|1,16|101|201|0') // [{ timeDelta: 0, mouseX: 100, ... }, ...]
  */
 export function parseReplayFrames(data: string): ReplayFrame[] {
   if (!data) return []
-  const parts = data.split(',')
+  const records = data.split(',').map(part => part.trim()).filter(Boolean)
   const frames: ReplayFrame[] = []
-  for (let i = 0; i + 3 < parts.length; i += 4) {
-    frames.push({
-      timeDelta: parseInt(parts[i], 10) || 0,
-      mouseX: parseInt(parts[i + 1], 10) || 0,
-      mouseY: parseInt(parts[i + 2], 10) || 0,
-      keys: parseInt(parts[i + 3], 10) || 0,
-    })
+  if (records.some(record => record.includes('|'))) {
+    for (const record of records) {
+      const parts = record.split('|')
+      if (parts.length < 4) continue
+      const timeDelta = Number.parseInt(parts[0], 10)
+      const mouseX = Number.parseFloat(parts[1])
+      const mouseY = Number.parseFloat(parts[2])
+      const keys = Number.parseInt(parts[3], 10)
+      if (timeDelta === -12345) continue
+      if (![timeDelta, mouseX, mouseY, keys].every(Number.isFinite)) continue
+      frames.push({ timeDelta, mouseX, mouseY, keys })
+    }
+    return frames
+  }
+
+  for (let i = 0; i + 3 < records.length; i += 4) {
+    const values = records.slice(i, i + 4).map(value => Number(value))
+    if (!values.every(Number.isFinite)) continue
+    frames.push({ timeDelta: values[0], mouseX: values[1], mouseY: values[2], keys: values[3] })
   }
   return frames
 }
@@ -203,8 +217,9 @@ export function dateToTicks(date: Date): bigint {
  */
 export function computeReplayMD5(username: string, timestamp: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
-  const o = -timestamp.getTimezoneOffset()
-  const tz = `${o >= 0 ? '+' : '-'}${pad(Math.floor(o / 60))}:${pad(o % 60)}`
+  const offsetMinutes = -timestamp.getTimezoneOffset()
+  const absoluteOffset = Math.abs(offsetMinutes)
+  const tz = `${offsetMinutes >= 0 ? '+' : '-'}${pad(Math.floor(absoluteOffset / 60))}:${pad(absoluteOffset % 60)}`
   const fmt = `${pad(timestamp.getMonth() + 1)}/${pad(timestamp.getDate())}/${timestamp.getFullYear()} ${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}:${pad(timestamp.getSeconds())} ${tz}`
   return createHash('md5').update(`lazer-${username}-${fmt}`).digest('hex')
 }

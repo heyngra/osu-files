@@ -3,7 +3,8 @@ import { readFileSync } from 'fs'
 import type { Skin, RealmFile, RealmNamedFileUsage } from './schema/types.js'
 import type { OsuFilesContext } from './context.js'
 import { SkinQuery } from './get/skins.get.js'
-import { createCrud } from './write/util.js'
+import type { Skins } from './get/facades.js'
+import { createCrud, type Crud } from './write/util.js'
 import { getConfig } from './write/factory.js'
 import { importOskEntries, type ImportedSkinData } from './skin/import.js'
 import { exportOskData } from './skin/export.js'
@@ -13,6 +14,7 @@ import { cloneSkinIni, parseSkinIni, serializeSkinIni, type SkinIniDocument } fr
 import { fileStoragePath } from './util.js'
 import { computeSkinHash, fullSkinContentHash, normalizeFilename, validateOwnerHashes } from './integrity.js'
 import type { SkinSnapshot } from './types/readonly.js'
+import { LogAction } from './write/logger.js'
 
 export type OwnedFileEditor = {
   /** Normalized owner-local filename. */
@@ -60,7 +62,7 @@ function getNextBestSkinName(existingNames: Iterable<string>, desiredName: strin
   return best === 0 ? desiredName : `${desiredName} (${best})`
 }
 
-function getSkin(ctx: OsuFilesContext, get: SkinQuery['proxify'] extends never ? never : ReturnType<SkinQuery['proxify']>, skinId: string): Skin {
+function getSkin(ctx: OsuFilesContext, skinId: string): Skin {
   const skin = ctx.realm.objectForPrimaryKey<Skin>('Skin', new Realm.BSON.UUID(skinId))
   if (!skin) throw new Error(`Skin '${skinId}' not found`)
   return skin
@@ -82,7 +84,19 @@ function skinHash(ctx: OsuFilesContext, usages: RealmNamedFileUsage[]): string {
   return computeSkinHash(ctx, usages)
 }
 
-function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument, skinQuery: SkinQuery, update: (id: unknown, patch: Record<string, unknown>) => Skin): boolean {
+function rollbackState(skin: Skin): Record<string, unknown> {
+  return {
+    Name: skin.Name ?? null,
+    Creator: skin.Creator ?? null,
+    Hash: skin.Hash ?? null,
+    Files: [...skin.Files].map(usage => ({
+      Filename: usage.Filename ?? null,
+      ...(usage.File?.Hash ? { File: { Hash: usage.File.Hash } } : {}),
+    })),
+  }
+}
+
+function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument): boolean {
   if (!ctx.filesFolderPath) throw new Error('filesFolderPath is required')
   assertWritable(ctx)
   if (skin.Protected) throw new Error(`Cannot modify protected skin '${skin.Name}'`)
@@ -94,6 +108,7 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
   const oldHash = existing?.File?.Hash
   const oldContent = oldHash ? ctx.fileStore?.read(oldHash, false) : undefined
   if (oldContent && oldContent.equals(content)) return false
+  const before = rollbackState(skin)
 
   const transaction = ctx.fileStore?.beginTransaction()
   const checkpoint = ctx.logger.checkpoint()
@@ -122,6 +137,7 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
     })
     transaction?.finalize()
     markChanged(ctx)
+    ctx.logger.log('Skin', LogAction.Update, skin.ID, before, rollbackState(skin))
     if (oldHash) cleanupBlobIfUnreferenced(ctx, oldHash)
     return result
   } catch (error) {
@@ -133,17 +149,17 @@ function persistIni(ctx: OsuFilesContext, skin: Skin, document: SkinIniDocument,
 }
 
 /**
- * Creates the skin sub-module with query, write, import/export, and lifecycle operations.
+ * Creates the skin module with read-only results, write operations, and skin file management.
  * @example
  * const skin = db.skins.get.byNameContains('WhiteCat')[0]
  */
-export function createSkinModule(ctx: OsuFilesContext) {
+export function createSkinModule(ctx: OsuFilesContext): SkinModule {
   const skinQuery = new SkinQuery(ctx.realm)
   skinQuery.enableCache = ctx.queryCache ?? true
   const get = skinQuery.proxify()
   const write = createCrud<Skin>(ctx, getConfig('Skin')!)
   return {
-    get,
+    get: get as unknown as Skins,
     write,
 
     /**
@@ -157,7 +173,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
      * await editor.getFile('button-left.png').edit(transform)
      */
     open: (skinId: string): SkinEditor => {
-      const skin = getSkin(ctx, get, skinId)
+      const skin = getSkin(ctx, skinId)
       const value = { ...skin, Files: [...skin.Files].map(file => ({ Filename: file.Filename, File: file.File ? { Hash: file.File.Hash } : undefined })) } as unknown as Readonly<Skin>
       return {
         id: skinId,
@@ -170,6 +186,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
           const replace = async (content: Buffer): Promise<boolean> => {
             assertWritable(ctx)
             if (skin.Protected) throw new Error(`Cannot modify protected skin '${skin.Name}'`)
+            const before = rollbackState(skin)
             const transaction = ctx.fileStore?.beginTransaction()
             const checkpoint = ctx.logger.checkpoint()
             const previousTransaction = ctx.fileTransaction
@@ -187,7 +204,13 @@ export function createSkinModule(ctx: OsuFilesContext) {
                 validateOwnerHashes(ctx, { ...skin, Files: next, Hash: skin.Hash } as Skin)
                 return true
               })
+              if (!result) {
+                transaction?.rollback()
+                return false
+              }
               transaction?.finalize()
+              markChanged(ctx)
+              ctx.logger.log('Skin', LogAction.Update, skin.ID, before, rollbackState(skin))
               cleanupBlobIfUnreferenced(ctx, originalHash)
               return result
             } catch (error) {
@@ -208,13 +231,13 @@ export function createSkinModule(ctx: OsuFilesContext) {
           return editor
         },
         readIni: () => readIniDocument(ctx, skin),
-        replaceIni: async source => persistIni(ctx, skin, typeof source === 'string' ? parseSkinIni(source) : cloneSkinIni(source), skinQuery, write.update),
+        replaceIni: async source => persistIni(ctx, skin, typeof source === 'string' ? parseSkinIni(source) : cloneSkinIni(source)),
         editIni: async edit => {
           const document = readIniDocument(ctx, skin) ?? parseSkinIni('')
           const original = serializeSkinIni(document)
           edit(document)
           if (serializeSkinIni(document) === original) return false
-          return persistIni(ctx, skin, document, skinQuery, write.update)
+          return persistIni(ctx, skin, document)
         },
         contentHash: () => fullSkinContentHash(ctx, skin),
       }
@@ -230,7 +253,7 @@ export function createSkinModule(ctx: OsuFilesContext) {
      * console.log(ini?.general.name)
      */
     readIni: (skinId: string): SkinIniDocument | undefined => {
-      const skin = getSkin(ctx, get, skinId)
+      const skin = getSkin(ctx, skinId)
       return readIniDocument(ctx, skin)
     },
 
@@ -244,8 +267,8 @@ export function createSkinModule(ctx: OsuFilesContext) {
      * db.skins.replaceIni(skinId, '[General]\nName: My Skin\n')
      */
     replaceIni: (skinId: string, source: string | SkinIniDocument): boolean => {
-      const skin = getSkin(ctx, get, skinId)
-      return persistIni(ctx, skin, typeof source === 'string' ? parseSkinIni(source) : cloneSkinIni(source), skinQuery, write.update)
+      const skin = getSkin(ctx, skinId)
+      return persistIni(ctx, skin, typeof source === 'string' ? parseSkinIni(source) : cloneSkinIni(source))
     },
 
     /**
@@ -260,12 +283,12 @@ export function createSkinModule(ctx: OsuFilesContext) {
      * })
      */
     editIni: (skinId: string, edit: (document: SkinIniDocument) => void): boolean => {
-      const skin = getSkin(ctx, get, skinId)
+      const skin = getSkin(ctx, skinId)
       const document = readIniDocument(ctx, skin) ?? parseSkinIni('')
       const original = serializeSkinIni(document)
       edit(document)
       if (serializeSkinIni(document) === original) return false
-      return persistIni(ctx, skin, document, skinQuery, write.update)
+      return persistIni(ctx, skin, document)
     },
 
     importOsk: async (filePath: string): Promise<ImportedSkinData> => {
@@ -367,13 +390,13 @@ export function createSkinModule(ctx: OsuFilesContext) {
   }
 }
 
-/** Skin sub-module with query, write, import/export, and lifecycle operations. */
+/** Skin module with read-only results, write operations, and skin file management. */
 export type SkinUpdatePatch = Partial<Omit<Skin, 'ID' | 'Hash' | 'Files'>>
 export interface SkinModule {
-  /** Queries readonly skin snapshots. */
-  readonly get: ReturnType<SkinQuery['proxify']>
+  /** Returns read-only skin snapshots through `get`. */
+  readonly get: Skins
   /** Creates, updates, deletes, or upserts skins. */
-  readonly write: ReturnType<typeof createCrud<Skin>>
+  readonly write: Crud<Skin>
   /** Opens one skin editor. */
   open(skinId: string): SkinEditor
   /** Reads a skin.ini file. */

@@ -67,6 +67,11 @@ function identifier(obj: object): string {
   return String((obj as Record<string, unknown>).ID ?? (obj as Record<string, unknown>).Hash ?? (obj as Record<string, unknown>).ShortName ?? '')
 }
 
+function safeFileComponent(value: unknown): string {
+  const encoded = Buffer.from(String(value), 'utf8').toString('base64url')
+  return encoded || '_'
+}
+
 function serialize(obj: unknown, seen?: Set<string>): unknown {
   seen = seen ?? new Set()
   if (obj === null || obj === undefined) return null
@@ -198,7 +203,7 @@ export class RollbackLogger {
 
     try {
       const ts = new Date(entry.timestamp).toISOString().replace(/[:.]/g, '-')
-      const file = join(this.logDir, `${ts}_${entity}_${action}_${entry.primaryKey}.json`)
+      const file = join(this.logDir, `${ts}_${safeFileComponent(entity)}_${safeFileComponent(action)}_${safeFileComponent(entry.primaryKey)}.json`)
       writeFileSync(file, JSON.stringify(entry, null, 2), 'utf-8')
     } catch {}
 
@@ -259,6 +264,11 @@ export class RollbackLogger {
   }
 
   private applyRevert(entry: RollbackEntry): void {
+    if (entry.entity === 'RulesetSetting') {
+      this.applyRulesetSettingRevert(entry)
+      return
+    }
+
     const cfg = this.resolveConfig(entry.entity)
     if (!cfg) return
 
@@ -277,7 +287,11 @@ export class RollbackLogger {
           if (!obj) break
           for (const [key, value] of Object.entries(entry.before)) {
             if (key === cfg.pk) continue
-            if (cfg.fks?.[key])
+            if (key === 'Files' && Array.isArray(value))
+              this.restoreFileList(obj[key], value)
+            else if (key === 'Beatmaps' && Array.isArray(value))
+              this.restoreBeatmapFields(obj[key], value)
+            else if (cfg.fks?.[key])
               Reflect.set(obj, key, this.resolveFkRef(value, cfg.fks[key]))
             else
               Reflect.set(obj, key, value)
@@ -296,6 +310,64 @@ export class RollbackLogger {
           this.realm.create(entry.entity, data as never)
           break
         }
+      }
+    })
+    markRealmChanged(this.realm)
+  }
+
+  private restoreFileList(target: unknown, value: unknown[]): void {
+    if (!target || typeof target !== 'object' || typeof Reflect.get(target, 'pop') !== 'function' || typeof Reflect.get(target, 'push') !== 'function') return
+    const list = target as { length: number; pop(): unknown; push(value: unknown): void }
+    while (list.length > 0) list.pop()
+    for (const raw of value) {
+      if (!raw || typeof raw !== 'object') continue
+      const item = raw as Record<string, unknown>
+      const fileData = item.File as Record<string, unknown> | null | undefined
+      const hash = fileData?.Hash
+      const usage: Record<string, unknown> = { Filename: item.Filename ?? null }
+      if (typeof hash === 'string') {
+        const file = this.realm.objectForPrimaryKey<Record<string, unknown>>('File', hash)
+        if (file) usage.File = file
+      }
+      list.push(usage)
+    }
+  }
+
+  private restoreBeatmapFields(target: unknown, value: unknown[]): void {
+    if (!target || typeof target !== 'object') return
+    const current = [...(target as Iterable<Record<string, unknown>>)]
+    for (const raw of value) {
+      if (!raw || typeof raw !== 'object') continue
+      const saved = raw as Record<string, unknown>
+      const id = String(saved.ID ?? '')
+      const beatmap = current.find(item => String(item.ID ?? '') === id)
+      if (!beatmap) continue
+      for (const key of ['Hash', 'MD5Hash']) {
+        if (key in saved) Reflect.set(beatmap, key, saved[key])
+      }
+    }
+  }
+
+  private applyRulesetSettingRevert(entry: RollbackEntry): void {
+    const data = (entry.action === LogAction.Create ? entry.after : entry.before) as Record<string, unknown> | null
+    if (!data) return
+    const find = (): Record<string, unknown> | undefined => {
+      const rulesetName = data.RulesetName ?? null
+      const variant = Number(data.Variant)
+      const key = String(data.Key ?? '')
+      return [...this.realm.objects<Record<string, unknown>>('RulesetSetting')]
+        .find(setting => (setting.RulesetName ?? null) === rulesetName && Number(setting.Variant) === variant && setting.Key === key)
+    }
+
+    this.realm.write(() => {
+      if (entry.action === LogAction.Create) {
+        const existing = find()
+        if (existing) this.realm.delete(existing)
+      } else if (entry.action === LogAction.Update) {
+        const existing = find()
+        if (existing && entry.before) existing.Value = entry.before.Value
+      } else if (entry.action === LogAction.Delete && !find()) {
+        this.realm.create('RulesetSetting', data as never)
       }
     })
     markRealmChanged(this.realm)

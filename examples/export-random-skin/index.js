@@ -1,3 +1,11 @@
+/** @satisfies {import('../../tools/docs/guide-schema.js').GuideMetadata} */
+const guide = {
+  group: 'skins',
+  title: 'export-random-skin',
+  order: 20,
+  summary: 'Picks an installed skin at random and exports it as an `.osk` archive.',
+  api: ['init', 'OsuFilesAPI.skins', 'OsuFilesAPI.osk'],
+}
 import readline from 'node:readline/promises'
 import { join } from 'node:path'
 import init from 'osu-files'
@@ -18,6 +26,11 @@ const rl = readline.createInterface({
   })
 
   try {
+    /**
+     * @docs
+     * Ask the skin query for usable entries. Built-in or incomplete skins may not have enough file data to export, so they are left out.
+     */
+    /* @docs:start choose-skin */
     const skins = initialized.skins.get.usable()
     if (skins.length === 0) {
       console.log('No usable skins found.')
@@ -25,6 +38,7 @@ const rl = readline.createInterface({
     }
 
     const chosen = skins[Math.floor(Math.random() * skins.length)]
+    /* @docs:end choose-skin */
     const skinName = chosen.Name ?? 'Unnamed Skin'
     const filename = `${skinName.replace(/[<>:"/\\|?*]/g, '_')}.osk`
     const outputPath = join(outputDir, filename)
@@ -33,7 +47,13 @@ const rl = readline.createInterface({
     console.log(`  ID:      ${chosen.ID.toString()}`)
     console.log(`  Creator: ${chosen.Creator ?? 'Unknown'}`)
     console.log(`  Hash:    ${chosen.Hash ?? '(built-in)'}`)
+    /**
+     * @docs
+     * Pass the skin's Realm ID to the exporter. It gathers the referenced files and writes them to an `.osk` archive.
+     */
+    /* @docs:start export-skin */
     await initialized.osk.export(chosen.ID.toString(), outputPath)
+    /* @docs:end export-skin */
     console.log(`  Saved to ${outputPath}`)
   } finally {
     initialized.close()

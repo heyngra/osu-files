@@ -1,3 +1,14 @@
+/** @satisfies {import('../../tools/docs/guide-schema.js').GuideMetadata} */
+const guide = {
+  group: 'replays',
+  groupTitle: 'Replays',
+  groupOrder: 30,
+  groupSummary: 'Import `.osr` files into Realm or export stored scores as replay files.',
+  title: 'import-osr',
+  order: 10,
+  summary: 'Imports an `.osr` replay and prints the metadata parsed from it.',
+  api: ['init', 'OsuFilesAPI.osr'],
+}
 import readline from 'node:readline/promises'
 import init from 'osu-files'
 
@@ -16,6 +27,11 @@ const rl = readline.createInterface({
   })
 
   try {
+    /**
+     * @docs
+     * Importing parses the replay, finds its beatmap by MD5, and writes the score to Realm. The returned object contains the replay metadata and decoded frames.
+     */
+    /* @docs:start import-replay */
     const result = initialized.osr.import(replayPath)
 
     console.log(`  Player: ${result.playerName}`)
@@ -26,6 +42,7 @@ const rl = readline.createInterface({
     console.log(`  MD5:    ${result.replayMD5}`)
     console.log(`  Frames: ${result.replayFrames.length}`)
     console.log(`  Online ID: ${result.onlineScoreID}`)
+    /* @docs:end import-replay */
     console.log('Done.')
   } finally {
     initialized.close()
