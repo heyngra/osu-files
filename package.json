@@ -35,8 +35,9 @@
     "docs:api-examples": "tsx tools/docs/generate-api-examples.ts",
     "docs:runner-types": "tsx tools/docs/generate-runner-types.ts",
     "docs:check": "tsx tools/docs/check-docs.ts",
-    "docs:build": "npm run build && npm run docs:fixture && npm run docs:api && npm run docs:manifest && npm run docs:guides && npm run docs:excludes && npm run docs:facades && npm run docs:normalize && npm run docs:api-examples && npm run docs:runner-types && npm run docs:check && vitepress build docs",
-    "docs:dev": "npm run docs:guides && vitepress dev docs",
+    "docs:generate": "npm run build && npm run docs:fixture && npm run docs:api && npm run docs:manifest && npm run docs:guides && npm run docs:excludes && npm run docs:facades && npm run docs:normalize && npm run docs:api-examples && npm run docs:runner-types",
+    "docs:build": "npm run docs:generate && npm run docs:check && vitepress build docs",
+    "docs:dev": "tsx tools/docs/dev.ts",
     "docs:test": "playwright test"
   },
   "dependencies": {
