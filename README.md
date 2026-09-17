@@ -31,6 +31,7 @@ const initialized = init(osuLazerRealmPath, {
 ## Docs
 
 [Documentation URL](https://osu-files.heyn.live)
+
 Most of the API References' examples can be ran in the web.
 
 ## License
