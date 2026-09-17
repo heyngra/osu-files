@@ -1,6 +1,6 @@
 {
   "name": "osu-files",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Read, modify, and import osu!lazer Realm data and osu! file formats.",
   "license": "MIT",
   "author": "heyn",
