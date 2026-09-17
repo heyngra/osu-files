@@ -41,8 +41,8 @@ const nodeKind = computed(() => {
 })
 const open = ref(props.depth === 0)
 
-function syncOpen(event: Event): void {
-  open.value = (event.target as HTMLDetailsElement).open
+function toggle(): void {
+  open.value = !open.value
 }
 const opening = computed(() => isArray.value ? '[' : '{')
 const closing = computed(() => isArray.value ? ']' : '}')
@@ -80,9 +80,8 @@ function childLabelKind(): 'property' | 'index' {
     :data-json-depth="props.depth"
     :data-json-path="props.path"
     :open="open"
-    @toggle="syncOpen"
   >
-    <summary class="json-node__summary" :aria-label="`Toggle ${labelText || 'root value'}`">
+    <summary class="json-node__summary" :aria-label="`Toggle ${labelText || 'root value'}`" @click.prevent="toggle">
       <span v-if="hasLabel" class="json-node__key">{{ labelText }}</span>
       <span class="json-node__punctuation">{{ opening }}</span>
       <span class="json-node__size">{{ entries.length }} {{ itemLabel }}</span>
