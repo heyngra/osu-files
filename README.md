@@ -3,7 +3,8 @@
 # osu!files
 
 This is a TypeScript library for osu!lazer that allows an easy read/write of client.realm.
-
+>[!CAUTION]
+>While this library tries it best to be safe and rollbackable, I cannot guarantee that something might break using it. Please use it with caution, and please send any bugs or ideas you might get.
 ## Why?
 
 I noticed that there are NO true libraries for managing osu!lazer files. Also, it sounded like a banger YouTube video idea.
