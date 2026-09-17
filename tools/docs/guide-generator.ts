@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, relative, resolve } from 'node:path'
 import ts from 'typescript'
 import type { GuideMetadata } from './guide-schema.js'
@@ -309,6 +309,7 @@ export function generateGuides(root = resolve('.')): Map<string, string> {
   const manifest = JSON.parse(readFileSync(join(root, 'docs/.generated/api-manifest.json'), 'utf8')) as ApiItem[]
   const pages = renderGuidePages(examples, manifest)
   const output = join(root, 'docs/guide/examples')
+  mkdirSync(output, { recursive: true })
   for (const [name, content] of pages) writeFileSync(join(output, name), content)
   writeFileSync(join(root, 'docs/.generated/guides.json'), `${JSON.stringify(examples, null, 2)}\n`)
   return pages
