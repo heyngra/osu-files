@@ -24,7 +24,8 @@ Import the archive in one call. The importer reads `skin.ini`, stores the archiv
 
 <GuideSource source="examples/import-skin/index.js" :start-line="35" :end-line="41">
 
-```js
+```js twoslash
+// @guide-source examples/import-skin/index.js#L35-L41
 console.log(`\nImporting ${oskPath}...`)
 const result = await initialized.osk.import(oskPath)
 console.log(`  Name:    ${result.name}`)
@@ -54,7 +55,8 @@ Ask the skin query for usable entries. Built-in or incomplete skins may not have
 
 <GuideSource source="examples/export-random-skin/index.js" :start-line="34" :end-line="40">
 
-```js
+```js twoslash
+// @guide-source examples/export-random-skin/index.js#L34-L40
 const skins = initialized.skins.get.usable()
 if (skins.length === 0) {
   console.log('No usable skins found.')
@@ -70,7 +72,8 @@ Pass the skin's Realm ID to the exporter. It gathers the referenced files and wr
 
 <GuideSource source="examples/export-random-skin/index.js" :start-line="55" :end-line="55">
 
-```js
+```js twoslash
+// @guide-source examples/export-random-skin/index.js#L55-L55
 await initialized.osk.export(chosen.ID.toString(), outputPath)
 ```
 

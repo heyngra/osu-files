@@ -13,7 +13,7 @@ import init from 'osu-files'
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
-})
+});
 
 (async () => {
   const osuLazerRealmPath = (await rl.question('What is the path of osu!lazer client.realm? ')).replace(/^["']|["']$/g, '')

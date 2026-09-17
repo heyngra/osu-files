@@ -20,11 +20,12 @@ npm install
 npm start
 ```
 
-Open Realm in read-only mode. Exporting does not need a write transaction.
+Open Realm in read-only mode.
 
 <GuideSource source="examples/export-collection/index.js" :start-line="30" :end-line="30">
 
-```js
+```js twoslash
+// @guide-source examples/export-collection/index.js#L30-L30
 const initialized = init(osuLazerRealmPath, { readOnly: true })
 ```
 
@@ -34,7 +35,8 @@ The collection module returns detached snapshots. Reading `.get` here loads ever
 
 <GuideSource source="examples/export-collection/index.js" :start-line="39" :end-line="39">
 
-```js
+```js twoslash
+// @guide-source examples/export-collection/index.js#L39-L39
 const all = initialized.collections.get
 ```
 
@@ -44,7 +46,8 @@ Enter `all` to export every collection, or type an exact name to export one. Nam
 
 <GuideSource source="examples/export-collection/index.js" :start-line="60" :end-line="72">
 
-```js
+```js twoslash
+// @guide-source examples/export-collection/index.js#L60-L72
 let data
 if (choice.toLowerCase() === 'all') {
   data = initialized.collections.exportLegacy(all)
@@ -66,7 +69,8 @@ if (choice.toLowerCase() === 'all') {
 
 <GuideSource source="examples/export-collection/index.js" :start-line="80" :end-line="80">
 
-```js
+```js twoslash
+// @guide-source examples/export-collection/index.js#L80-L80
 writeFileSync(outputPath, data)
 ```
 
@@ -90,7 +94,8 @@ Import the legacy database in one call. Collections with new names are created; 
 
 <GuideSource source="examples/import-collection/index.js" :start-line="32" :end-line="38">
 
-```js
+```js twoslash
+// @guide-source examples/import-collection/index.js#L32-L38
 console.log(`\nImporting ${legacyDbPath}...`)
 const { imported, merged } = initialized.collections.importLegacy(legacyDbPath)
 const total = initialized.collections.get.count()
@@ -120,7 +125,8 @@ Collection queries return detached snapshots. Changes go through the collection 
 
 <GuideSource source="examples/manage-collection/index.js" :start-line="50" :end-line="51">
 
-```js
+```js twoslash
+// @guide-source examples/manage-collection/index.js#L50-L51
 const col = osu.collections.get.byName(name).first()
 if (!col) { console.log(`'${name}' not found.`); continue }
 ```
@@ -131,7 +137,8 @@ Collections store beatmap MD5 hashes, not online IDs. Look up the beatmap first,
 
 <GuideSource source="examples/manage-collection/index.js" :start-line="83" :end-line="87">
 
-```js
+```js twoslash
+// @guide-source examples/manage-collection/index.js#L83-L87
 const beatmap = osu.beatmaps.get.byOnlineId(onlineId).first()
 if (!beatmap) { console.log(`Beatmap ${onlineId} not found.`); continue }
 if (!beatmap.MD5Hash) { console.log(`Beatmap ${onlineId} has no MD5Hash.`); continue }
@@ -145,7 +152,8 @@ Removal uses the same MD5 hash. The local array is updated as well so the next p
 
 <GuideSource source="examples/manage-collection/index.js" :start-line="107" :end-line="108">
 
-```js
+```js twoslash
+// @guide-source examples/manage-collection/index.js#L107-L108
 osu.collections.removeBeatmap(String(col.ID), md5)
 hashes.splice(idx, 1)
 ```

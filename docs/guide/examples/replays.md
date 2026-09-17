@@ -24,7 +24,8 @@ Importing parses the replay, finds its beatmap by MD5, and writes the score to R
 
 <GuideSource source="examples/import-osr/index.js" :start-line="35" :end-line="44">
 
-```js
+```js twoslash
+// @guide-source examples/import-osr/index.js#L35-L44
 const result = initialized.osr.import(replayPath)
 
 console.log(`  Player: ${result.playerName}`)
@@ -57,7 +58,8 @@ Sort scores by date and limit the query before printing them. These are detached
 
 <GuideSource source="examples/export-osr/index.js" :start-line="34" :end-line="38">
 
-```js
+```js twoslash
+// @guide-source examples/export-osr/index.js#L34-L38
 const recent = initialized.scores.get.sortedBy('Date').limit(10)
 if (recent.length === 0) {
   console.log('No scores found.')
@@ -71,7 +73,8 @@ Look up the chosen score by its Realm ID. The exporter accepts that same ID when
 
 <GuideSource source="examples/export-osr/index.js" :start-line="53" :end-line="58">
 
-```js
+```js twoslash
+// @guide-source examples/export-osr/index.js#L53-L58
 const choice = (await rl.question('Enter the Score ID to export: ')).trim()
 const score = initialized.scores.get.byId(choice).first()
 if (!score) {
@@ -84,7 +87,8 @@ if (!score) {
 
 <GuideSource source="examples/export-osr/index.js" :start-line="64" :end-line="64">
 
-```js
+```js twoslash
+// @guide-source examples/export-osr/index.js#L64-L64
 initialized.osr.export(choice, outputPath)
 ```
 

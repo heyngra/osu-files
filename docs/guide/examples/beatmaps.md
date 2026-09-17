@@ -24,7 +24,8 @@ Open the Realm together with its files folder. This example writes both database
 
 <GuideSource source="examples/create-storyboard/index.js" :start-line="29" :end-line="29">
 
-```js
+```js twoslash
+// @guide-source examples/create-storyboard/index.js#L29-L29
 const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
 ```
 
@@ -34,7 +35,8 @@ Read the three images and put each buffer in the content-addressed file store. T
 
 <GuideSource source="examples/create-storyboard/index.js" :start-line="43" :end-line="48">
 
-```js
+```js twoslash
+// @guide-source examples/create-storyboard/index.js#L43-L48
 const [bgBuf, logoBuf, spBuf] = [readFileSync(bgPath), readFileSync(logoPath), readFileSync(spPath)]
 const images = [
   { filename: bgPath.split(/[\\/]/).pop(), content: bgBuf, hash: osu.files.put(bgBuf).hash },
@@ -49,7 +51,8 @@ A storyboard is split into layers. Here, every sprite goes into the foreground l
 
 <GuideSource source="examples/create-storyboard/index.js" :start-line="56" :end-line="67">
 
-```js
+```js twoslash
+// @guide-source examples/create-storyboard/index.js#L56-L67
 const sb = new Storyboard()
 const fg = sb.getLayer("Foreground")
 const bg = new StoryboardSprite(images[0], Anchor.Centre, { x: 320, y: 240 })
@@ -70,7 +73,8 @@ Serialize the plain beatmap object back to `.osu` text, then store that text lik
 
 <GuideSource source="examples/create-storyboard/index.js" :start-line="92" :end-line="93">
 
-```js
+```js twoslash
+// @guide-source examples/create-storyboard/index.js#L92-L93
 const osuContent = osu.beatmap.serialize(beatmap)
 const osuHash = osu.files.put(Buffer.from(osuContent)).hash
 ```
@@ -81,7 +85,8 @@ Register the set after all of its files have hashes. `importSet` writes the set,
 
 <GuideSource source="examples/create-storyboard/index.js" :start-line="104" :end-line="116">
 
-```js
+```js twoslash
+// @guide-source examples/create-storyboard/index.js#L104-L116
 const result = osu.sets.importSet({
   onlineID: -1,
   setHash,
@@ -117,7 +122,8 @@ Start with the available sets. The labels use the first beatmap's metadata so th
 
 <GuideSource source="examples/explore-storyboard/index.js" :start-line="73" :end-line="76">
 
-```js
+```js twoslash
+// @guide-source examples/explore-storyboard/index.js#L73-L76
 const sets = osu.sets.get.map(s => ({
   item: s,
   label: `${s.Beatmaps?.[0]?.Metadata?.Artist} - ${s.Beatmaps?.[0]?.Metadata?.Title} (#${s.OnlineID})`
@@ -130,7 +136,8 @@ Realm only stores the beatmap record. `getFullData` also reads and parses the `.
 
 <GuideSource source="examples/explore-storyboard/index.js" :start-line="91" :end-line="94">
 
-```js
+```js twoslash
+// @guide-source examples/explore-storyboard/index.js#L91-L94
 const data = osu.beatmap.getFullData(String(beatmap.ID))
 if (!data?.storyboard) { console.log("No storyboard on this beatmap."); return }
 
@@ -146,7 +153,8 @@ Each layer contains sprites, animations, and samples. Pick an element to print i
 
 <GuideSource source="examples/explore-storyboard/index.js" :start-line="108" :end-line="112">
 
-```js
+```js twoslash
+// @guide-source examples/explore-storyboard/index.js#L108-L112
 const layers = [...sb.layers.entries()].map(([name, layer]) => ({
   item: { name, layer },
   label: `${name} (${layer.elements.length} elements)`,
@@ -174,7 +182,8 @@ Sort the sets by `DateAdded` and take the first result. If Realm is empty, there
 
 <GuideSource source="examples/export-newest-osz/index.js" :start-line="34" :end-line="38">
 
-```js
+```js twoslash
+// @guide-source examples/export-newest-osz/index.js#L34-L38
 const newest = initialized.sets.get.sortedBy('DateAdded').first()
 if (!newest) {
   console.log('No beatmap sets found.')
@@ -188,7 +197,8 @@ Export by Realm ID. The exporter reads the beatmaps and their referenced files, 
 
 <GuideSource source="examples/export-newest-osz/index.js" :start-line="55" :end-line="55">
 
-```js
+```js twoslash
+// @guide-source examples/export-newest-osz/index.js#L55-L55
 await initialized.osz.export(newest.ID.toString(), outputPath)
 ```
 
@@ -212,7 +222,8 @@ Read the chosen directory and keep only files with an `.osz` extension. `checkHa
 
 <GuideSource source="examples/import-beatmap/index.js" :start-line="34" :end-line="35">
 
-```js
+```js twoslash
+// @guide-source examples/import-beatmap/index.js#L34-L35
 const allFiles = await readdir(beatmapDir)
 const oszFiles = allFiles.filter(f => extname(f).toLowerCase() === '.osz')
 ```
@@ -223,7 +234,8 @@ Import one archive at a time. A successful import returns the set ID and its bea
 
 <GuideSource source="examples/import-beatmap/index.js" :start-line="46" :end-line="48">
 
-```js
+```js twoslash
+// @guide-source examples/import-beatmap/index.js#L46-L48
 const result = await initialized.osz.import(fullPath)
 console.log(`  OK: setID=${result.onlineID} beatmaps=${result.beatmaps.length}`)
 await rm(fullPath)

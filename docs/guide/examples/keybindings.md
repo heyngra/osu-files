@@ -24,7 +24,8 @@ Register the built-in osu! defaults first. The result reports how many bindings 
 
 <GuideSource source="examples/manage-keybinds/index.js" :start-line="27" :end-line="28">
 
-```js
+```js twoslash
+// @guide-source examples/manage-keybinds/index.js#L27-L28
 const r = osu.keybindings.registerDefaults(OSU_DEFAULTS, RulesetName.Osu)
 console.log(`osu! defaults - inserted: ${r.inserted}, removed: ${r.removed}`)
 ```
@@ -35,7 +36,8 @@ Read the keys currently assigned to `LeftButton`, then replace them with the A k
 
 <GuideSource source="examples/manage-keybinds/index.js" :start-line="36" :end-line="40">
 
-```js
+```js twoslash
+// @guide-source examples/manage-keybinds/index.js#L36-L40
 const keys = osu.keybindings.getActionKeys(RulesetName.Osu, 'LeftButton')
 console.log(`LeftButton: ${keys.join(', ')}`)
 
