@@ -59,7 +59,9 @@ type BlendingValues = { easing?: Easing; startTime?: number; endTime?: number; s
 export class StoryboardCommandGroup {
   private __sb?: Storyboard
 
+  /** @internal */
   get _sb(): Storyboard | undefined { return this.__sb }
+  /** @internal */
   set _sb(sb: Storyboard | undefined) { this.__sb = sb }
 
   alpha: StoryboardAlphaCommand[] = []

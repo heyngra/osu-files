@@ -19,6 +19,7 @@ export class StoryboardLayer {
 
   get count(): number { return this.elements.length }
 
+  /** @internal */
   _attach(sb: Storyboard): void {
     this.__sb = sb
     for (const el of this.elements) el._sb = sb

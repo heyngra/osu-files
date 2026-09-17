@@ -15,7 +15,9 @@ export class StoryboardSprite {
   triggerGroups: StoryboardTriggerGroup[] = []
 
   private __sb?: Storyboard
+  /** @internal */
   get _sb(): Storyboard | undefined { return this.__sb }
+  /** @internal */
   set _sb(sb: Storyboard | undefined) {
     this.__sb = sb
     this.commands._sb = sb
@@ -171,7 +173,9 @@ export class StoryboardSample {
   get path(): string { return this.file.filename }
 
   private __sb?: Storyboard
+  /** @internal */
   get _sb(): Storyboard | undefined { return this.__sb }
+  /** @internal */
   set _sb(sb: Storyboard | undefined) { this.__sb = sb }
 
   constructor(fileRef: FileRef, startTime: number, volume = 100, source?: StoryboardElementSource) {
