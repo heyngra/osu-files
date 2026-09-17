@@ -45,6 +45,16 @@ describe('Import/Export .osz', { timeout: 60000 }, () => {
     } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
   })
 
+  it('imports a multi-beatmap .osz when hash checks are enabled', async () => {
+    const { root, filesPath, realmPath } = tmp()
+    const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath, checkHash: true })
+    try {
+      const result = await osu.osz.import(SAMPLE_OSZ)
+      assert.strictEqual(result.beatmaps.length, 4)
+      assert.strictEqual(osu.sets.get.length, 1)
+    } finally { osu.close(); rmSync(root, { recursive: true, force: true }) }
+  })
+
   it('reads full beatmap data back from files folder', async () => {
     const { root, filesPath, realmPath } = tmp()
     const osu = init(realmPath, { schemaVersion: 51, filesFolderPath: filesPath })
