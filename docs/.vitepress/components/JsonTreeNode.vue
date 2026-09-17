@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { JsonValue } from '../runner/output.js'
 
 defineOptions({ name: 'JsonTreeNode' })
@@ -39,6 +39,11 @@ const nodeKind = computed(() => {
   if (props.value === null) return 'null'
   return typeof props.value
 })
+const open = ref(props.depth === 0)
+
+function syncOpen(event: Event): void {
+  open.value = (event.target as HTMLDetailsElement).open
+}
 const opening = computed(() => isArray.value ? '[' : '{')
 const closing = computed(() => isArray.value ? ']' : '}')
 const itemLabel = computed(() => {
@@ -74,7 +79,8 @@ function childLabelKind(): 'property' | 'index' {
     :data-json-node="nodeKind"
     :data-json-depth="props.depth"
     :data-json-path="props.path"
-    :open="props.depth === 0"
+    :open="open"
+    @toggle="syncOpen"
   >
     <summary class="json-node__summary" :aria-label="`Toggle ${labelText || 'root value'}`">
       <span v-if="hasLabel" class="json-node__key">{{ labelText }}</span>
