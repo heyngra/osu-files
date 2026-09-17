@@ -4,6 +4,10 @@
   "description": "Read, modify, and import osu!lazer Realm data and osu! file formats.",
   "license": "MIT",
   "author": "heyn",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/heyngra/osu-files"
+  },
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
